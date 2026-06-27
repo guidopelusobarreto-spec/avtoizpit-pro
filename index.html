@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Авто Изпит PRO">
+<title>Авто Изпит PRO</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon192.png">
+<style>
+
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--bg4:#2d333b;--fg:#e6edf3;--fg2:#8b949e;--fg3:#6e7681;--acc:#f97316;--acc2:#fb923c;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--yellow:#eab308;--purple:#a855f7;--cyan:#06b6d4;--r:12px;--rs:8px}
+[data-theme="light"]{--bg:#f6f8fa;--bg2:#ffffff;--bg3:#eaeef2;--bg4:#d0d7de;--fg:#1f2328;--fg2:#656d76;--fg3:#6e7781;--acc:#f97316;--acc2:#ea6c00;--green:#1a7f37;--red:#cf222e;--blue:#0969da;--yellow:#9a6700}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:18px;overflow:hidden;transition:background .2s,color .2s}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;overflow:hidden}
+.screen.active{display:flex}
+.hdr{display:flex;align-items:center;gap:10px;padding:12px 16px 8px;background:var(--bg);border-bottom:1px solid var(--bg4);flex-shrink:0}
+.back{background:none;border:none;color:var(--acc);font-size:24px;cursor:pointer;padding:2px 8px;line-height:1}
+.htitle{font-size:16px;font-weight:700;flex:1;color:var(--fg)}
+.hsub{font-size:11px;color:var(--fg2);margin-top:2px}
+.scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.hero{padding:16px 16px 8px;text-align:center}
+.hero-t{font-size:21px;font-weight:900;color:var(--acc);letter-spacing:-.5px}
+.hero-s{font-size:11px;color:var(--fg2);margin-top:2px}
+.coach{margin:0 16px 8px;background:linear-gradient(135deg,rgba(249,115,22,.13),rgba(249,115,22,.03));border:1px solid rgba(249,115,22,.35);border-radius:12px;padding:12px 14px 10px}
+.coach-ttl{font-size:11px;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.coach-msg{font-size:13px;color:var(--fg);line-height:1.5;margin-bottom:8px}
+.coach-acts{display:flex;flex-wrap:wrap;gap:6px}
+.cbtn{background:var(--acc);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
+.predict-box{margin:0 16px 8px;border-radius:8px;padding:9px 13px;font-size:12px;display:none}
+.predict-box.show{display:block}
+.predict-box.go{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+.predict-box.soon{background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.25);color:var(--yellow)}
+.predict-box.notyet{background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);color:var(--acc)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:0 16px 8px}
+.stat{background:var(--bg2);border-radius:8px;padding:8px 6px;text-align:center;border:1px solid var(--bg4)}
+.stat-n{font-size:19px;font-weight:900;color:var(--acc)}.stat-l{font-size:10px;color:var(--fg2);margin-top:1px}
+.pw2{padding:0 16px 6px}
+.pl{display:flex;justify-content:space-between;font-size:11px;color:var(--fg2);margin-bottom:3px}
+.pb{height:5px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.pbf{height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:3px;transition:width .5s}
+.sec-lbl{padding:6px 16px 3px;font-size:10px;font-weight:800;color:var(--fg3);text-transform:uppercase;letter-spacing:.6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:0 16px 4px}
+.card{background:var(--bg2);border:1.5px solid var(--bg4);border-radius:12px;padding:11px 10px;cursor:pointer;transition:transform .12s;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
+.card:active{transform:scale(.95)}.card.hi{border-color:var(--acc);background:linear-gradient(135deg,rgba(249,115,22,.13),rgba(249,115,22,.02))}.card.full{grid-column:1/-1}
+.ci{font-size:23px}.ct{font-size:12px;font-weight:700;color:var(--fg)}.cd{font-size:10px;color:var(--fg2);line-height:1.3}
+.set-row{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--bg3);cursor:pointer}
+.set-row:active{background:var(--bg3)}
+.set-c{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;flex-shrink:0}
+.set-i{flex:1;min-width:0}.set-t{font-size:13px;font-weight:700}.set-m{font-size:10px;color:var(--fg2);margin-top:2px}
+.set-b{height:3px;background:var(--bg3);border-radius:2px;margin-top:5px;overflow:hidden}.set-bf{height:100%;border-radius:2px}
+.set-p{font-size:13px;font-weight:700;flex-shrink:0;min-width:32px;text-align:right}
+.qpw{padding:7px 16px 3px;flex-shrink:0}
+.qpb{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-bottom:4px}
+.qpbf{height:100%;background:var(--acc);transition:width .3s;border-radius:2px}
+.qpi{display:flex;justify-content:space-between;font-size:11px;color:var(--fg2)}
+.timer-bar{height:3px;background:var(--green);transition:width 1s linear,background .5s;flex-shrink:0}
+.bdg{display:flex;flex-wrap:wrap;gap:4px;padding:3px 16px 1px;flex-shrink:0}
+.b{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700}
+.bp{background:rgba(234,179,8,.2);color:var(--yellow)}.bf{background:rgba(249,115,22,.2);color:var(--acc)}
+.bt{background:rgba(168,85,247,.2);color:var(--purple)}.bm{background:rgba(59,130,246,.2);color:var(--blue)}
+.bv{background:rgba(34,197,94,.2);color:var(--green)}
+.qsc{flex:1;overflow-y:auto;padding:7px 16px 10px;-webkit-overflow-scrolling:touch}
+.qimg{width:100%;max-height:170px;object-fit:contain;border-radius:8px;background:var(--bg2);margin-bottom:8px;display:block}
+.qvid{width:100%;border-radius:8px;overflow:hidden;background:#000;margin-bottom:8px}.qvid video{width:100%;max-height:190px;display:block}
+.qtxt{font-size:20px;font-weight:600;line-height:1.55;margin-bottom:8px;color:var(--fg)}
+.audio-btn{background:none;border:none;font-size:18px;cursor:pointer;padding:2px 4px;opacity:.7;flex-shrink:0}
+.qes-box{background:rgba(249,115,22,.08);border-left:3px solid var(--acc);border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:8px}
+.qes-lbl{font-size:10px;font-weight:800;color:var(--acc);text-transform:uppercase;margin-bottom:2px}
+.qes-txt{font-size:17px;color:var(--acc2);line-height:1.45}
+.answers{display:flex;flex-direction:column;gap:9px;margin-bottom:8px}
+.ans{background:var(--bg2);border:1.5px solid var(--bg4);border-radius:10px;padding:13px 14px;cursor:pointer;text-align:left;width:100%;transition:border-color .12s,background .12s}
+.ans:active:not([disabled]){opacity:.85}.ans[disabled]{cursor:default}
+.ans.sel{border-color:var(--blue);background:rgba(59,130,246,.11)}
+.ans.ok{border-color:var(--green)!important;background:rgba(34,197,94,.12)!important}
+.ans.bad{border-color:var(--red)!important;background:rgba(239,68,68,.1)!important}
+.ans.miss{border-color:var(--yellow)!important;background:rgba(234,179,8,.09)!important}
+.ar{display:flex;align-items:flex-start;gap:10px}
+.al{font-size:13px;font-weight:800;color:var(--fg3);width:18px;flex-shrink:0;padding-top:2px}
+.at{flex:1}.atxt{font-size:17px;color:var(--fg);line-height:1.45}
+.aes{font-size:14px;color:var(--acc2);margin-top:4px;line-height:1.4}
+.conf-row{display:flex;gap:5px;margin-bottom:7px}
+.conf-btn{flex:1;padding:7px 3px;border:1.5px solid var(--bg4);border-radius:8px;background:var(--bg2);color:var(--fg2);font-size:11px;font-weight:700;cursor:pointer;text-align:center}
+.conf-btn.c-s{border-color:var(--green);background:rgba(34,197,94,.12);color:var(--green)}
+.conf-btn.c-u{border-color:var(--yellow);background:rgba(234,179,8,.1);color:var(--yellow)}
+.conf-btn.c-d{border-color:var(--red);background:rgba(239,68,68,.08);color:var(--red)}
+.exp-box{background:var(--bg2);border-radius:8px;padding:12px 14px;margin-bottom:8px;border-left:4px solid var(--green);display:none}
+.exp-box.show{display:block}.exp-box.err{border-left-color:var(--red)}
+.exp-h{font-size:15px;font-weight:700;margin-bottom:4px}
+.exp-h.ok{color:var(--green)}.exp-h.err{color:var(--red)}
+.exp-b{font-size:15px;color:var(--fg2);line-height:1.55}
+.tb{display:flex;gap:6px;padding:8px 16px;border-top:1px solid var(--bg3);flex-shrink:0;background:var(--bg)}
+.tb button{padding:10px 5px;border-radius:8px;border:none;cursor:pointer;font-size:12px;font-weight:700}
+.btn-lang{background:var(--bg3);color:var(--fg2);flex:0 0 60px}
+.btn-ok{background:var(--acc);color:#fff;flex:1}
+.btn-ok:disabled{background:var(--bg3);color:var(--fg3);cursor:not-allowed}
+.btn-nx{background:var(--blue);color:#fff;flex:1}
+.rh{padding:20px 16px 12px;text-align:center}
+.ri{font-size:48px}.rsc{font-size:42px;font-weight:900;margin-top:4px}.ro{font-size:13px;color:var(--fg2);margin-top:2px}
+.rbdg{display:inline-block;margin-top:6px;padding:4px 16px;border-radius:20px;font-size:12px;font-weight:700}
+.rbdg.pass{background:rgba(34,197,94,.2);color:var(--green)}.rbdg.fail{background:rgba(239,68,68,.15);color:var(--red)}.rbdg.neut{background:var(--bg3);color:var(--fg2)}
+/* Badges de calor */
+.bheat{background:rgba(249,115,22,.2)!important;color:#f97316!important;font-weight:800}
+/* Banner examen seco */
+.dry-banner{background:rgba(239,68,68,.1);border:1px solid var(--red);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px;color:var(--red);font-weight:600;text-align:center;display:none}
+.pass{background:rgba(34,197,94,.2);color:var(--green)}.fail{background:rgba(239,68,68,.2);color:var(--red)}.neut{background:rgba(249,115,22,.2);color:var(--acc)}
+.rg{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:0 16px 10px}
+.rs2{background:var(--bg2);border-radius:8px;padding:10px;text-align:center;border:1px solid var(--bg4)}
+.rs2 .n{font-size:19px;font-weight:800}.rs2 .l{font-size:10px;color:var(--fg2);margin-top:2px}
+.rbs{display:flex;flex-direction:column;gap:8px;padding:0 16px 24px}
+.rbtn{padding:12px;border-radius:12px;border:none;cursor:pointer;font-size:13px;font-weight:700}
+.rbtn:active{opacity:.8}.rbtn.p{background:var(--acc);color:#fff}.rbtn.s{background:var(--bg2);border:1px solid var(--bg4);color:var(--fg)}
+.rev-item{padding:11px 16px;border-bottom:1px solid var(--bg3)}
+.rev-q{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:3px}
+.rev-q-es{font-size:11px;color:var(--acc2);margin-bottom:5px}
+.rev-a{font-size:12px;padding:5px 8px;border-radius:6px;margin-bottom:3px;line-height:1.4}
+.rev-a.ok{background:rgba(34,197,94,.12);color:var(--green)}.rev-a.bad{background:rgba(239,68,68,.1);color:var(--red)}
+.rev-exp{font-size:11px;color:var(--fg2);margin-top:5px;padding:5px 8px;background:var(--bg3);border-radius:6px;line-height:1.4}
+.an-sec{padding:11px 16px;border-bottom:1px solid var(--bg3)}
+.an-t{font-size:10px;font-weight:800;color:var(--fg3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.ins{background:var(--bg2);border-radius:8px;padding:10px 12px;margin-bottom:6px}
+.ins.g{border-left:4px solid var(--green)}.ins.b{border-left:4px solid var(--red)}
+.ins.w{border-left:4px solid var(--yellow)}.ins.i{border-left:4px solid var(--blue)}
+.ins-t{font-size:13px;font-weight:700;color:var(--fg);margin-bottom:2px}
+.ins-b{font-size:12px;color:var(--fg2);line-height:1.5}
+.chart-wrap{padding:6px 0}
+.bar-row{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.bar-lbl{font-size:10px;color:var(--fg2);width:60px;flex-shrink:0;text-align:right}
+.bar-bg{flex:1;height:14px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .5s}
+.bar-val{font-size:11px;font-weight:700;width:32px;flex-shrink:0}
+.cal-wrap{display:flex;flex-wrap:wrap;gap:3px;padding:4px 0}
+.cal-day{width:18px;height:18px;border-radius:2px;background:var(--bg3)}
+.cal-day.d1{background:rgba(249,115,22,.3)}.cal-day.d2{background:rgba(249,115,22,.6)}.cal-day.d3{background:var(--acc)}
+.ach-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:4px 0}
+.ach{background:var(--bg2);border:1.5px solid var(--bg4);border-radius:8px;padding:8px 6px;text-align:center;font-size:10px;color:var(--fg3)}
+.ach.earned{border-color:var(--acc);color:var(--fg)}
+.ach-icon{font-size:22px;margin-bottom:3px}.ach-lbl{line-height:1.3}
+.stbox{text-align:center;padding:16px}
+.stn{font-size:46px;font-weight:900;color:var(--acc)}.stl{font-size:12px;color:var(--fg2)}
+.psec{padding:11px 16px;border-bottom:1px solid var(--bg3)}
+.pst{font-size:10px;font-weight:800;color:var(--fg3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.pr{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.prl{font-size:12px;flex:1.5;color:var(--fg)}.prp{font-size:12px;font-weight:700;color:var(--acc);min-width:32px;text-align:right}
+.pm{height:5px;flex:2;background:var(--bg3);border-radius:3px;overflow:hidden}
+.pmf{height:100%;background:var(--acc);border-radius:3px;transition:width .5s}
+.pex{padding:7px 10px;background:var(--bg2);border-radius:8px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--bg4)}
+.pex-l{font-size:11px;color:var(--fg)}.pex-r{font-size:12px;font-weight:700}
+.fc-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:12px}
+.fc{width:100%;max-width:420px;min-height:170px;background:var(--bg2);border-radius:12px;border:1.5px solid var(--bg4);padding:22px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer}
+.fc-front{font-size:21px;font-weight:700;color:var(--acc);line-height:1.3}
+.fc-back{font-size:15px;color:var(--fg);line-height:1.5;display:none}
+.fc-sub2{font-size:11px;color:var(--fg3);margin-top:6px}
+.fc-btns{display:flex;gap:10px;width:100%;max-width:420px}
+.fc-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+.fc-no{background:rgba(239,68,68,.15);color:var(--red)}.fc-yes{background:rgba(34,197,94,.15);color:var(--green)}
+.fc-prog{font-size:11px;color:var(--fg2)}
+.gs{padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--bg4);flex-shrink:0}
+.gi{width:100%;background:var(--bg2);border:1px solid var(--bg4);border-radius:8px;padding:8px 12px;color:var(--fg);font-size:14px;outline:none}
+.gi:focus{border-color:var(--acc)}
+.gitem{padding:11px 16px;border-bottom:1px solid var(--bg3);cursor:pointer}
+.gterm{font-size:14px;font-weight:700;color:var(--acc)}.gbg{font-size:11px;color:var(--fg2);margin-top:2px}
+.ges{font-size:13px;color:var(--fg);margin-top:2px;font-weight:500}
+.gexp{font-size:11px;color:var(--fg3);margin-top:3px;line-height:1.4;display:none}
+.gitem.open .gexp{display:block}
+.sett-row{padding:13px 16px;border-bottom:1px solid var(--bg3)}
+.sett-lbl{font-size:14px;font-weight:600;color:var(--fg);margin-bottom:4px}
+.sett-sub{font-size:11px;color:var(--fg2);margin-bottom:8px}
+.sett-inp{background:var(--bg2);border:1px solid var(--bg4);border-radius:8px;padding:9px 12px;color:var(--fg);font-size:13px;outline:none;width:100%}
+.sett-inp:focus{border-color:var(--acc)}
+.sett-btn{background:var(--acc);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px;width:100%}
+.to{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:999;display:none;flex-direction:column;justify-content:flex-end}
+.to.open{display:flex}
+.tp{background:var(--bg2);border-radius:12px 12px 0 0;max-height:80vh;display:flex;flex-direction:column}
+.tph{padding:11px 16px;border-bottom:1px solid var(--bg4);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.tpht{flex:1;font-size:14px;font-weight:700}
+.tphc{background:var(--bg3);border:none;color:var(--fg2);width:27px;height:27px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+.tm{flex:1;overflow-y:auto;padding:11px 16px;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
+.tmsg{max-width:88%;padding:9px 11px;border-radius:8px;font-size:13px;line-height:1.5;white-space:pre-wrap}
+.tmsg.u{background:var(--acc);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+.tmsg.a{background:var(--bg3);color:var(--fg);align-self:flex-start;border-bottom-left-radius:3px}
+.tmsg.ld{opacity:.5}
+.tpi{padding:8px 13px;border-top:1px solid var(--bg4);display:flex;gap:7px;flex-shrink:0}
+.tpi input{flex:1;background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;padding:9px 11px;color:var(--fg);font-size:13px;outline:none}
+.tpi input:focus{border-color:var(--acc)}
+.tpi button{background:var(--acc);border:none;color:#fff;border-radius:8px;padding:9px 13px;cursor:pointer;font-size:16px}
+.toast{position:fixed;bottom:66px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--bg3);color:var(--fg);padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;z-index:9999;border:1px solid var(--bg4);white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+
+/* ── Calendario mejorado ── */
+.cal-grid{display:grid;grid-template-columns:repeat(90,1fr);gap:2px;padding:8px 16px}
+.cal-day{width:100%;aspect-ratio:1;border-radius:2px;background:var(--bg3);min-width:2px}
+.cal-day.d1{background:#1a3a1a}.cal-day.d2{background:#1e5c1e}.cal-day.d3{background:#238636}.cal-day.d4{background:#3fb950}
+/* ── Gráfico puntuaciones ── */
+#score-chart{margin:8px 16px;border-radius:8px;background:var(--bg2);min-height:130px;overflow:hidden}
+/* ── Stats por hora ── */
+.hour-bars{display:flex;align-items:flex-end;gap:4px;padding:8px 0;height:60px}
+.hour-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:2px}
+.hour-bar{width:18px;border-radius:3px 3px 0 0;min-height:4px;transition:height .3s}
+.hour-lbl{font-size:9px;color:var(--fg3)}
+/* ── Métricas resumen ── */
+.msum-item{text-align:center;padding:8px}.msum-n{font-size:22px;font-weight:800;color:var(--acc)}.msum-l{font-size:11px;color:var(--fg3);margin-top:2px}
+/* ── Búsqueda ── */
+.search-inp{width:100%;background:var(--bg2);border:1.5px solid var(--bg4);border-radius:10px;padding:12px 16px;color:var(--fg);font-size:16px;outline:none;margin-bottom:12px}
+.search-inp:focus{border-color:var(--acc)}
+/* ── Secciones ── */
+.sec-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:0 16px 8px}
+.sec-card{background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;padding:14px 12px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:4px}
+.sec-card:active{opacity:.8}.sec-n{font-size:22px;font-weight:800;color:var(--acc)}.sec-lname{font-size:14px;font-weight:600;color:var(--fg)}.sec-sub{font-size:11px;color:var(--fg3)}
+/* ── Badge calor ── */
+.bheat{background:rgba(249,115,22,.2)!important;color:#f97316!important;font-weight:800}
+/* ── Banner examen seco ── */
+.dry-banner{background:rgba(239,68,68,.1);border:1px solid var(--red);border-radius:8px;padding:8px 12px;margin:0 16px 8px;font-size:13px;color:var(--red);font-weight:600;text-align:center;display:none}
+/* ── Botón TTS español ── */
+.btn-speak-es{background:none;border:1px solid var(--acc);border-radius:6px;color:var(--acc);font-size:12px;padding:3px 8px;cursor:pointer;margin-top:6px}
+.btn-speak-es:active{opacity:.7}
+</style>
+<script>
+// Error handler global
+window.onerror = function(msg, src, line, col, err) {
+  var d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;background:#0d1117;color:#ef4444;padding:24px;font-family:monospace;font-size:13px;z-index:99999;overflow:auto;white-space:pre-wrap';
+  d.innerHTML = '<div style="color:#f97316;font-size:16px;margin-bottom:12px">ERROR</div>' +
+    'Mensaje: ' + msg + '
+' + 'Archivo: ' + src + '
+' + 'Linea: ' + line + '
+
+' +
+    (err ? err.stack : '') +
+    '<br><br><button onclick="localStorage.clear();location.reload()" style="background:#f97316;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;cursor:pointer">Reiniciar</button>';
+  document.body.appendChild(d);
+  return true;
+};
+</script>
+</head>
+<body>
+
+
+<div id="pw-screen" style="position:fixed;inset:0;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;z-index:9999">
+ <div style="font-size:48px;margin-bottom:16px">&#x1F697;</div>
+ <div style="font-size:22px;font-weight:900;color:#f97316;margin-bottom:8px">&#x0410;&#x0432;&#x0442;&#x043E; &#x0418;&#x0437;&#x043F;&#x0438;&#x0442; PRO</div>
+ <div style="font-size:13px;color:#8b949e;margin-bottom:24px;text-align:center">Introduce la contrasena</div>
+ <input id="pw-inp" type="password" placeholder="Contrasena" autocomplete="current-password" onkeydown="if(event.key==='Enter')doPW()"
+   style="width:100%;max-width:300px;background:#161b22;border:1.5px solid #2d333b;border-radius:8px;padding:12px 16px;color:#e6edf3;font-size:16px;outline:none;text-align:center;letter-spacing:2px;display:block">
+ <button id="pw-btn" onclick="doPW()" style="width:100%;max-width:300px;background:#f97316;color:#fff;border:none;border-radius:8px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;display:block">Entrar</button>
+ <div id="pw-err" style="color:#ef4444;font-size:13px;margin-top:8px;display:none">Contrasena incorrecta</div>
+</div>
+<div id="home" class="screen">
+ <div class="hdr">
+  <div style="flex:1"><div class="htitle">&#x1F697; &#x0410;&#x0432;&#x0442;&#x043E; &#x0418;&#x0437;&#x043F;&#x0438;&#x0442; PRO</div><div class="hsub" id="hero-sub">Cargando...</div></div>
+  <button onclick="show('s-sett')" style="background:none;border:none;font-size:20px;cursor:pointer;color:#8b949e">&#x2699;&#xFE0F;</button>
+ </div>
+ <div class="scr">
+  <div class="coach"><div class="coach-ttl">&#x1F3AF; Coach Diario</div><div class="coach-msg" id="coach-msg">Calculando...</div><div class="coach-acts" id="coach-acts"></div></div>
+  <div class="predict-box" id="predict-box"></div>
+  <div class="stats">
+   <div class="stat"><div class="stat-n" id="s-seen">0</div><div class="stat-l">Vistas</div></div>
+   <div class="stat"><div class="stat-n" id="s-dom">0</div><div class="stat-l">Dominadas</div></div>
+   <div class="stat"><div class="stat-n" id="s-str">0</div><div class="stat-l">Racha &#x1F525;</div></div>
+  </div>
+  <div class="pw2"><div class="pl"><span>Progreso global</span><span id="gpct">0%</span></div><div class="pb"><div class="pbf" id="gbar" style="width:0%"></div></div></div>
+  <div class="sec-lbl">🎯 Plan: 97pts en &lt;20 min</div>
+  <div class="grid">
+   <button class="card hi full" onclick="openMisionDia()" style="background:rgba(249,115,22,.08);border-color:var(--acc)"><span class="ci">🗓️</span><span class="ct">Misión de Hoy</span><span class="cd">Qué estudiar exactamente ahora mismo</span></button>
+   <button class="card hi" onclick="mod('fase1')" style="border-color:var(--acc)"><span class="ci">🎯</span><span class="ct">F1: Casi-Seguras</span><span class="cd">8 preg >20% freq • dominar PRIMERO</span></button>
+   <button class="card hi" onclick="mod('fase2')"><span class="ci">🎬</span><span class="ct">F2: Videos Críticos</span><span class="cd">20 videos 3pt • siempre 2 en el examen</span></button>
+   <button class="card hi" onclick="mod('fase3')"><span class="ci">💎</span><span class="ct">F3: Tres Puntos</span><span class="cd">360 preg • 47% de los puntos del examen</span></button>
+   <button class="card" onclick="mod('fase4')"><span class="ci">📚</span><span class="ct">F4: Banco Completo</span><span class="cd">911 preg • cobertura total del banco</span></button>
+  </div>
+  <div class="sec-lbl">⭐ Simulacros</div>
+  <div class="grid">
+   <button class="card hi full" onclick="mod('realexam')"><span class="ci">📋</span><span class="ct">Simulacro Real</span><span class="cd">Con feedback • distribución exacta 666 tests КАТ</span></button>
+   <button class="card hi" onclick="mod('examdry')"><span class="ci">🎓</span><span class="ct">Examen Seco</span><span class="cd">Sin feedback • condiciones КАТ reales • cronometrado</span></button>
+   <button class="card hi" onclick="modoVelocidad()"><span class="ci">⚡</span><span class="ct">Modo Velocidad</span><span class="cd">Meta <20s/preg • terminar en <15 min</span></button>
+   <button class="card" onclick="mod('ultimahora')"><span class="ci">🔥</span><span class="ct">Última Hora</span><span class="cd">Top frecuentes no dominadas</span></button>
+  </div>
+  <div class="sec-lbl">🎧 Escuchar</div>
+  <div class="grid">
+   <button class="card hi" onclick="openPodcast()"><span class="ci">🎧</span><span class="ct">Podcast Bilingüe</span><span class="cd">BG+ES • pregunta, respuesta, explicación • sin tocar pantalla</span></button>
+   <button class="card" onclick="modoNocturno()"><span class="ci">🌙</span><span class="ct">Repaso Nocturno</span><span class="cd">10 preg F1+F2 • 5 min • consolida al dormir</span></button>
+  </div>
+  <div class="sec-lbl">📊 Por Frecuencia Real (±1%)</div>
+  <div class="grid"><button class="card full" onclick="openSets()"><span class="ci">📊</span><span class="ct">Sets por Frecuencia</span><span class="cd">8 sets • 10.000 tests analizados • empieza por Set 1</span></button></div>
+  <div class="sec-lbl">🏋️ Entrenamiento</div>
+  <div class="grid">
+   <button class="card" onclick="mod('srs')"><span class="ci">📅</span><span class="ct">SRS</span><span class="cd">Repetición espaciada • momento óptimo</span></button>
+   <button class="card" onclick="mod('adaptive')"><span class="ci">🧠</span><span class="ct">Adaptativo</span><span class="cd">Interleaving • tus debilidades</span></button>
+   <button class="card" onclick="mod('flash')"><span class="ci">⚡</span><span class="ct">Relámpago</span><span class="cd">5 preg • 2 min</span></button>
+   <button class="card" onclick="mod('corrective')"><span class="ci">🎯</span><span class="ct">Mis Errores</span><span class="cd">Segundo intento en las falladas</span></button>
+   <button class="card" onclick="mod('quick')"><span class="ci">🚀</span><span class="ct">Rápido</span><span class="cd">10 preg • 5 min</span></button>
+   <button class="card" onclick="mod('exam')"><span class="ci">⏱️</span><span class="ct">Oficial</span><span class="cd">45 preg • 40 min</span></button>
+  </div>
+  <div class="sec-lbl">📚 Módulos</div>
+  <div class="grid">
+   <button class="card" onclick="mod('pts3')"><span class="ci">💎</span><span class="ct">3 Puntos</span><span class="cd">508 preg • máximo valor</span></button>
+   <button class="card" onclick="mod('traps')"><span class="ci">⚠️</span><span class="ct">Trampas</span><span class="cd">222 preg casi idénticas</span></button>
+   <button class="card" onclick="mod('multi')"><span class="ci">✅✅</span><span class="ct">Multirespuesta</span><span class="cd">Varias respuestas correctas</span></button>
+   <button class="card" onclick="modoSeñalesVisual()"><span class="ci">🚦</span><span class="ct">Señales Visuales</span><span class="cd">Imagen → identificar • reconocimiento instantáneo</span></button>
+   <button class="card" onclick="mod('videocrit')"><span class="ci">🎬</span><span class="ct">Videos</span><span class="cd">56 situaciones reales</span></button>
+   <button class="card" onclick="mod('banco')"><span class="ci">📚</span><span class="ct">Banco</span><span class="cd">1487 preguntas</span></button>
+  </div>
+  <div class="sec-lbl">🛠️ Herramientas</div>
+  <div class="grid">
+   <button class="card" onclick="openSearch()"><span class="ci">🔍</span><span class="ct">Buscar</span><span class="cd">Busca cualquier pregunta</span></button>
+   <button class="card" onclick="show('s-sections')"><span class="ci">📚</span><span class="ct">Por Sección</span><span class="cd">R1 a R6 • elige la débil</span></button>
+   <button class="card" onclick="openFlash()"><span class="ci">🃏</span><span class="ct">Flashcards</span><span class="cd">Vocabulario BG-ES</span></button>
+   <button class="card" onclick="openGlos()"><span class="ci">🔎</span><span class="ct">Glosario</span><span class="cd">Términos técnicos</span></button>
+   <button class="card" onclick="openAnalytics()"><span class="ci">📊</span><span class="ct">Análisis</span><span class="cd">6 agentes • superlearning</span></button>
+   <button class="card" onclick="openProg()"><span class="ci">🏆</span><span class="ct">Progreso</span><span class="cd">Stats, calendario y logros</span></button>
+  </div>
+  <div style="height:70px"></div>
+ </div>
+</div>
+<div id="s-sets" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#x2190;</button><div><div class="htitle">Sets por Frecuencia</div><div class="hsub">200 tests reales avtoizpit.com</div></div></div>
+ <div style="padding:7px 16px;font-size:12px;color:#8b949e;background:#161b22;border-bottom:1px solid #2d333b;flex-shrink:0">Set 1 = mas probables. Empieza siempre aqui.</div>
+ <div class="scr" id="sets-c"></div>
+</div>
+<div id="s-q" class="screen">
+ <div class="hdr">
+  <button class="back" onclick="backC()">&#x2190;</button>
+  <div style="flex:1;min-width:0"><div class="htitle" id="qtit">Modo</div><div class="hsub" id="qsub"></div></div>
+  <div id="qtimer" style="font-size:13px;font-weight:700;color:#f97316;min-width:36px;text-align:right;display:none"></div>
+  <button onclick="openTutor()" style="background:none;border:none;font-size:19px;cursor:pointer;padding:4px 6px">&#x1F916;</button>
+ </div>
+ <div class="qpw"><div class="qpb"><div class="qpbf" id="qpf"></div></div><div class="qpi"><span id="qn">1/45</span><span id="qsc2">0 pts</span><span id="q-speed" style="margin-left:4px"></span></div></div>
+ <div id="timer-bar" class="timer-bar" style="display:none"></div>
+ <div id="dry-banner" class="dry-banner">🎓 EXAMEN SECO — Sin feedback. Resultados al final.</div>
+ <div class="bdg" id="bdg"></div>
+ <div class="qsc" id="qbody"></div>
+ <div class="tb">
+  <button class="btn-lang" id="btn-lang" onclick="togLang()">Solo BG</button>
+  <button id="btn-auto-read" class="btn-lang" onclick="toggleAutoRead()" style="font-size:12px">🔇 Auto</button>
+  <button class="btn-ok" id="btn-ok" onclick="confA()" disabled>Confirmar</button>
+  <button class="btn-nx" id="btn-nx" onclick="nextQ()" style="display:none">Siguiente →</button>
+ </div>
+</div>
+<div id="s-res" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#x2190;</button><div class="htitle">Resultado</div></div>
+ <div class="scr">
+  <div class="rh"><div class="ri" id="ri">&#x1F389;</div><div class="rsc" id="rsc">0</div><div class="ro" id="ro">puntos</div><div class="rbdg neut" id="rbdg">-</div></div>
+  <div class="rg">
+   <div class="rs2"><div class="n" id="rok">0</div><div class="l">Correctas</div></div>
+   <div class="rs2"><div class="n" id="rko">0</div><div class="l">Errores</div></div>
+   <div class="rs2"><div class="n" id="rp3">0</div><div class="l">3pts OK</div></div>
+   <div class="rs2"><div class="n" id="rt">0:00</div><div class="l">Tiempo</div></div>
+  </div>
+  <div class="rbs">
+   <div id="res-extra" style="display:none"></div>
+   <button class="rbtn p" onclick="openReview()">🔍 Revisar errores</button>
+   <button class="rbtn p" id="btn-corrective" onclick="startCorrectiveFeedback()" style="display:none">🎯 Repasar falladas</button>
+   <button class="rbtn p" onclick="retry()">🔄 Repetir</button>
+   <button class="rbtn p" onclick="mod('ultimahora')">⚡ Última Hora</button>
+   <button class="rbtn s" onclick="show('home')">🏠 Inicio</button>
+  </div>
+ </div>
+</div>
+<div id="s-rev" class="screen">
+ <div class="hdr"><button class="back" onclick="show('s-res')">&#x2190;</button><div class="htitle">Revision</div></div>
+ <div class="scr" id="rev-body"></div>
+</div>
+<div id="s-an" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#x2190;</button><div><div class="htitle">&#x1F4C8; Analisis</div><div class="hsub">4 agentes coordinados</div></div></div>
+ <div class="scr" id="an-body"></div>
+</div>
+<div id="s-glos" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#x2190;</button><div class="htitle">Glosario BG-ES</div></div>
+ <div class="gs"><input class="gi" id="gi" placeholder="Buscar..." oninput="filtG(this.value)"></div>
+ <div class="scr" id="glist"></div>
+</div>
+<div id="s-flash" class="screen">
+ <div class="hdr">
+  <button class="back" onclick="show('home')">&#x2190;</button>
+  <div style="flex:1"><div class="htitle">Flashcards</div><div class="hsub" id="fc-sub">0 tarjetas</div></div>
+  <button onclick="shuffleFlash()" style="background:none;border:none;color:#8b949e;cursor:pointer;padding:4px 8px">&#x1F500;</button>
+ </div>
+ <div class="fc-wrap">
+  <div class="fc-prog" id="fc-prog"></div>
+  <div class="fc" id="fc-card" onclick="flipCard()">
+   <div class="fc-front" id="fc-front">...</div>
+   <div class="fc-back" id="fc-back"></div>
+   <div class="fc-sub2" id="fc-sub2">Toca para ver</div>
+  </div>
+  <div class="fc-btns" id="fc-btns" style="display:none">
+   <button class="fc-btn fc-no" onclick="fcAnswer(false)">&#x274C; No</button>
+   <button class="fc-btn fc-yes" onclick="fcAnswer(true)">&#x2705; Si</button>
+  </div>
+  <div class="fc-btns" id="fc-flip-btn">
+   <button class="fc-btn" style="background:#21262d;color:#e6edf3" onclick="flipCard()">&#x1F504; Ver</button>
+  </div>
+ </div>
+</div>
+<div id="s-prog" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">📊 Mi Progreso</div></div>
+ <div class="scr">
+  <!-- Métricas resumen -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--bg4);margin-bottom:12px" id="m-summary"></div>
+  <!-- Racha -->
+  <div class="stbox"><div class="stn" id="stn">0</div><div class="stl">días de racha 🔥</div></div>
+  <!-- Gráfico puntuación -->
+  <div class="psec">
+   <div class="pst">📈 Puntuación en el tiempo</div>
+   <div id="score-chart" style="min-height:130px"></div>
+  </div>
+  <!-- Calendario 90 días -->
+  <div class="psec">
+   <div class="pst">📅 Calendario de actividad (90 días)</div>
+   <div style="overflow-x:auto"><div id="cal"></div></div>
+   <div style="display:flex;gap:8px;padding:4px 16px;align-items:center;font-size:11px;color:var(--fg3)">
+    <span>Menos</span>
+    <div style="width:12px;height:12px;border-radius:2px;background:var(--bg3)"></div>
+    <div style="width:12px;height:12px;border-radius:2px;background:#1a3a1a"></div>
+    <div style="width:12px;height:12px;border-radius:2px;background:#238636"></div>
+    <div style="width:12px;height:12px;border-radius:2px;background:#3fb950"></div>
+    <span>Más</span>
+   </div>
+  </div>
+  <!-- Stats por hora -->
+  <div class="psec">
+   <div class="pst">⏰ Tu rendimiento por hora del día</div>
+   <div id="hour-stats" style="padding:0 16px"></div>
+  </div>
+  <!-- Progreso sets y módulos -->
+  <div class="psec"><div class="pst">Sets 1-8</div><div id="pp-sets"></div></div>
+  <div class="psec"><div class="pst">Módulos</div><div id="pp-mods"></div></div>
+  <!-- Historial simulacros -->
+  <div class="psec"><div class="pst">Últimos simulacros</div><div id="pp-ex"></div></div>
+  <!-- Logros -->
+  <div class="psec"><div class="pst">🏆 Logros</div><div class="ach-grid" id="ach-grid"></div></div>
+  <div style="height:40px"></div>
+ </div>
+</div>
+<!-- ═══ BÚSQUEDA ═══════════════════════════════════════════════════ -->
+<div id="s-search" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">🔍 Buscar pregunta</div></div>
+ <div class="scr" style="padding:16px">
+  <input id="search-inp" class="search-inp" type="search" placeholder="Buscar en búlgaro o español..." oninput="doSearch()">
+  <div id="search-results" style="color:#8b949e;font-size:13px">Escribe para buscar entre 1487 preguntas</div>
+ </div>
+</div>
+
+<!-- ═══ SECCIONES ═══════════════════════════════════════════════════ -->
+<div id="s-sections" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">📚 Estudiar por sección</div></div>
+ <div class="scr" style="padding:16px">
+  <div style="font-size:13px;color:var(--fg3);margin-bottom:12px">El Coach detecta tu sección más débil. Aquí puedes entrenar cualquiera.</div>
+  <div class="sec-grid">
+   <button class="sec-card" onclick="mod('sec_1')">
+    <div class="sec-n">R1</div><div class="sec-lname">Vehículo</div>
+    <div class="sec-sub">Técnica y documentación</div>
+   </button>
+   <button class="sec-card" onclick="mod('sec_2')">
+    <div class="sec-n">R2</div><div class="sec-lname">Vías</div>
+    <div class="sec-sub">Carriles, velocidades, señales viales</div>
+   </button>
+   <button class="sec-card" onclick="mod('sec_3')" style="border-color:rgba(249,115,22,.4)">
+    <div class="sec-n">R3</div><div class="sec-lname">Señales</div>
+    <div class="sec-sub">⭐ 7x en el examen real</div>
+   </button>
+   <button class="sec-card" onclick="mod('sec_4')" style="border-color:rgba(249,115,22,.5)">
+    <div class="sec-n">R4</div><div class="sec-lname">Normas</div>
+    <div class="sec-sub">🔥 22x en el examen real</div>
+   </button>
+   <button class="sec-card" onclick="mod('sec_5')">
+    <div class="sec-n">R5</div><div class="sec-lname">Factores</div>
+    <div class="sec-sub">Conducción segura</div>
+   </button>
+   <button class="sec-card" onclick="mod('sec_6')">
+    <div class="sec-n">R6</div><div class="sec-lname">Obligaciones</div>
+    <div class="sec-sub">Sanciones y normas</div>
+   </button>
+  </div>
+ </div>
+</div>
+
+<!-- ═══ PODCAST ══════════════════════════════════════════════════════ -->
+<div id="s-podcast" class="screen">
+ <div class="hdr"><button class="back" onclick="TTS.stopPodcast();show('home')">←</button><div class="htitle">🎧 Podcast Bilingüe</div></div>
+ <!-- Panel de control del podcast (visible cuando está activo) -->
+ <div id="pod-panel" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;
+  background:var(--bg2);border-top:1px solid var(--bg4);padding:12px 16px;
+  flex-direction:column;gap:8px;align-items:center">
+  <div id="pod-lbl" style="font-size:13px;color:var(--fg3)">Cargando...</div>
+  <div style="display:flex;gap:10px">
+   <button onclick="prevPodcast()" style="background:var(--bg3);border:none;border-radius:8px;padding:10px 16px;color:var(--fg);font-size:18px;cursor:pointer">⏮</button>
+   <button id="pod-play" onclick="pausePodcast()" style="background:var(--acc);border:none;border-radius:8px;padding:10px 24px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">⏸ Pausar</button>
+   <button onclick="nextPodcast()" style="background:var(--bg3);border:none;border-radius:8px;padding:10px 16px;color:var(--fg);font-size:18px;cursor:pointer">⏭</button>
+   <button onclick="stopPodcast()" style="background:var(--red);border:none;border-radius:8px;padding:10px 16px;color:#fff;font-size:14px;cursor:pointer">⏹</button>
+  </div>
+ </div>
+ <div class="scr" style="padding:16px">
+  <div style="font-size:13px;color:var(--fg3);margin-bottom:16px;line-height:1.6">
+   Escucha pregunta en BG → ES → respuesta correcta BG → ES → explicación ES.<br>
+   Sin tocar la pantalla. Ideal para caminar, cocinar o cualquier actividad.
+  </div>
+  <div id="pod-options"></div>
+ </div>
+</div>
+
+<!-- ═══ MISIÓN DEL DÍA ════════════════════════════════════════════ -->
+<div id="s-mision" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">🎯 Misión de Hoy</div></div>
+ <div class="scr">
+  <div id="mision-panel" style="padding:0"></div>
+ </div>
+</div>
+
+<div id="s-sett" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">⚙️ Ajustes</div></div>
+ <div class="scr">
+  <!-- Tema -->
+  <div class="sett-row">
+   <div class="sett-lbl">Tema visual</div>
+   <div class="sett-sub">Claro u oscuro según tu preferencia</div>
+   <button id="theme-btn" class="sett-btn" style="margin-top:8px" onclick="toggleTheme()">☀️ Claro</button>
+  </div>
+  <!-- API Key -->
+  <div class="sett-row">
+   <div class="sett-lbl">API Key Claude (Instructor IA)</div>
+   <div class="sett-sub">Se guarda solo en tu dispositivo</div>
+   <input class="sett-inp" id="api-key-inp" type="password" placeholder="sk-ant-...">
+   <button class="sett-btn" onclick="saveAPIKey()">💾 Guardar</button>
+   <div style="font-size:11px;color:#6e7681;margin-top:6px" id="api-key-status"></div>
+  </div>
+  <!-- Velocidad TTS búlgaro -->
+  <div class="sett-row">
+   <div class="sett-lbl">Velocidad audio búlgaro</div>
+   <div style="display:flex;gap:8px;margin-top:8px">
+    <button id="spd-slow" class="sett-btn" style="flex:1;margin-top:0;background:var(--bg3);color:var(--fg)" onclick="setSpeed(0.6)">Lenta</button>
+    <button id="spd-norm" class="sett-btn" style="flex:1;margin-top:0" onclick="setSpeed(0.85)">Normal</button>
+    <button id="spd-fast" class="sett-btn" style="flex:1;margin-top:0;background:var(--bg3);color:var(--fg)" onclick="setSpeed(1.0)">Rápida</button>
+   </div>
+  </div>
+  <!-- Notificaciones -->
+  <div class="sett-row">
+   <div class="sett-lbl">🔔 Recordatorio diario</div>
+   <div class="sett-sub">Aviso diario para mantener la racha (Android)</div>
+   <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+    <input id="notif-hour" type="number" min="6" max="22" value="9"
+     style="width:70px;background:var(--bg2);border:1px solid var(--bg4);border-radius:8px;padding:8px;color:var(--fg);font-size:15px;text-align:center">
+    <span style="font-size:13px;color:var(--fg2)">horas</span>
+    <button class="sett-btn" style="margin-top:0;flex:1" onclick="setupNotifications()">Activar</button>
+   </div>
+  </div>
+  <!-- Cache offline -->
+  <div class="sett-row">
+   <div class="sett-lbl">📴 Cache offline</div>
+   <div class="sett-sub">Guarda las imágenes y videos más frecuentes para usar sin internet</div>
+   <button id="cache-btn" class="sett-btn" style="margin-top:8px" onclick="preCacheImages()">⬇️ Cachear ahora</button>
+  </div>
+  <!-- Contraseña -->
+  <div class="sett-row">
+   <div class="sett-lbl">🔒 Cambiar contraseña</div>
+   <input class="sett-inp" id="new-pw-inp" type="password" placeholder="Nueva contraseña" style="margin-top:8px">
+   <button class="sett-btn" onclick="changePassword()">Cambiar</button>
+  </div>
+  <!-- Info -->
+  <div class="sett-row" style="font-size:12px;color:#8b949e;line-height:1.8">
+   Авто Изпит PRO v5.0 • 1487 preguntas • 6 agentes<br>
+   MREST 100% traducido ES • Superlearning integrado<br>
+   Distribución real: 200 tests КАТ analizados
+  </div>
+ </div>
+</div>
+<div class="to" id="tutor">
+ <div class="tp">
+  <div class="tph"><span style="font-size:18px">&#x1F916;</span><div class="tpht">Instructor Claude</div><button class="tphc" onclick="closeTutor()">&#x2715;</button></div>
+  <div class="tm" id="tmsgs"></div>
+  <div class="tpi"><input id="tinp" placeholder="Pregunta en espanol..." onkeydown="if(event.key==='Enter')sendT()"><button onclick="sendT()">&#x2191;</button></div>
+ </div>
+</div>
+
+<div id="install-banner" style="position:fixed;bottom:0;left:0;right:0;background:#161b22;border-top:1px solid #2d333b;padding:12px 16px;display:none;align-items:center;gap:12px;z-index:500">
+ <div style="flex:1;font-size:13px;color:#e6edf3">&#x1F4F2; Instalar como app</div>
+ <button onclick="installPWA()" style="background:#f97316;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">Instalar</button>
+ <button onclick="dismissBanner()" style="background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer">&#x2715;</button>
+</div>
+<div class="toast" id="toast"></div>
+
+
+
+<!-- ═══ DATOS ═══════════════════════════════════════════════════ -->
+<script src="data-ranked.js"></script>
+<script src="data-traps.js"></script>
+<script src="data-pts3.js"></script>
+<script src="data-multi.js"></script>
+<script src="data-mrest.js"></script>
+<script src="data-vids.js"></script>
+<script src="data-glos.js"></script>
+<script src="data-vocab.js"></script>
+
+<!-- ═══ LÓGICA ══════════════════════════════════════════════════ -->
+<script src="brain.js"></script>
+<script src="agents.js"></script>
+<script src="app.js"></script>
+
+<!-- ═══ INIT ════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  // Registrar Service Worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js', {scope:'./'})
+      .then(function(r){ console.log('[SW] registrado:', r.scope); })
+      .catch(function(e){ console.warn('[SW] error:', e); });
+  }
+
+  // Variables globales que el app.js necesita
+  var ALL = [], ALL_MAP = {};
+
+  function buildAll() {
+    var sources = [
+      typeof RANKED !== 'undefined' ? RANKED : [],
+      typeof TRAPS  !== 'undefined' ? TRAPS  : [],
+      typeof PTS3   !== 'undefined' ? PTS3   : [],
+      typeof MULTI  !== 'undefined' ? MULTI  : [],
+      typeof MREST  !== 'undefined' ? MREST  : [],
+      typeof VIDS   !== 'undefined' ? VIDS   : [],
+    ];
+    sources.forEach(function(arr) {
+      arr.forEach(function(q) {
+        if (q && q.id && typeof q.id === 'number' && !ALL_MAP[q.id]) {
+          ALL_MAP[q.id] = q;
+        }
+      });
+    });
+    ALL = Object.values(ALL_MAP);
+    window.ALL = ALL;
+    window.ALL_MAP = ALL_MAP;
+    if (typeof BRAIN !== 'undefined') BRAIN.initFreq(ALL);
+    var sub = document.getElementById('hero-sub');
+    if (sub) sub.textContent = ALL.length + ' preg • 6 agentes • Simulacro Real • TTS búlgaro';
+    console.log('[App] Banco cargado:', ALL.length, 'preguntas');
+  }
+
+  function startApp() {
+    buildAll();
+
+    // Verificar sesión de contraseña
+    var session = localStorage.getItem('pw_session');
+    var valid = session && (Date.now() - parseInt(session)) < 86400000 * 7; // 7 días
+    if (valid) {
+      doLogin();
+    } else {
+      var pwScreen = document.getElementById('pw-screen');
+      if (pwScreen) pwScreen.style.display = 'flex';
+    }
+  }
+
+  function doLogin() {
+    var pwScreen = document.getElementById('pw-screen');
+    if (pwScreen) pwScreen.style.display = 'none';
+    if (typeof show === 'function') show('home');
+    if (typeof uhome === 'function') uhome();
+    if (typeof doCoach === 'function') setTimeout(doCoach, 300);
+  }
+
+  function doPW() {
+    var pw = localStorage.getItem('app_pw') || 'guido2024';
+    var val = document.getElementById('pw-inp').value;
+    if (val === pw) {
+      localStorage.setItem('pw_session', Date.now().toString());
+      doLogin();
+    } else {
+      document.getElementById('pw-err').style.display = 'block';
+      document.getElementById('pw-inp').value = '';
+      document.getElementById('pw-inp').focus();
+    }
+  }
+
+  // Exponer en scope global
+  window.doPW = doPW;
+  window.doLogin = doLogin;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startApp);
+  } else {
+    startApp();
+  }
+})();
+</script>
+</body>
+</html>
