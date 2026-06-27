@@ -1033,8 +1033,18 @@ window.pausePodcast  = function(){ TTS.pausePodcast(); };
 window.nextPodcast   = function(){ TTS.nextPodcast(); };
 window.prevPodcast   = function(){ TTS.prevPodcast(); };
 window.stopPodcast   = function(){
+  // Cancelar inmediatamente
+  try { window.speechSynthesis.cancel(); } catch(e){}
+  // Ocultar panel
+  var panel = document.getElementById('pod-panel');
+  if(panel) panel.style.display = 'none';
+  // Notificar al motor TTS
   TTS.stopPodcast();
-  setTimeout(function(){ show('home'); }, 400);
+  // Navegar a home después de 500ms (Android necesita tiempo para limpiar TTS)
+  setTimeout(function(){
+    try { window.speechSynthesis.cancel(); } catch(e){}
+    show('home');
+  }, 500);
 };
 
 // ── MISIÓN DEL DÍA ────────────────────────────────────────────────
