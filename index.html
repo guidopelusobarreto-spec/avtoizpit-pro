@@ -644,7 +644,7 @@ window.onerror = function(msg, src, line, col, err) {
 
     // Verificar sesión de contraseña
     var session = localStorage.getItem('pw_session');
-    var valid = session && (Date.now() - parseInt(session)) < 86400000 * 7; // 7 días
+    var valid = session && (Date.now() - parseInt(session)) < 86400000; // 1 día
     if (valid) {
       doLogin();
     } else {

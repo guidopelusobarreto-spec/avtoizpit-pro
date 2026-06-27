@@ -1032,19 +1032,9 @@ window.startPodcastMode = startPodcastMode;
 window.pausePodcast  = function(){ TTS.pausePodcast(); };
 window.nextPodcast   = function(){ TTS.nextPodcast(); };
 window.prevPodcast   = function(){ TTS.prevPodcast(); };
-window.stopPodcast   = function(){
-  // Cancelar inmediatamente
-  try { window.speechSynthesis.cancel(); } catch(e){}
-  // Ocultar panel
-  var panel = document.getElementById('pod-panel');
-  if(panel) panel.style.display = 'none';
-  // Notificar al motor TTS
+window.stopPodcast = function(){
   TTS.stopPodcast();
-  // Navegar a home después de 500ms (Android necesita tiempo para limpiar TTS)
-  setTimeout(function(){
-    try { window.speechSynthesis.cancel(); } catch(e){}
-    show('home');
-  }, 500);
+  setTimeout(function(){ show('home'); }, 300);
 };
 
 // ── MISIÓN DEL DÍA ────────────────────────────────────────────────
@@ -1380,135 +1370,148 @@ var TTS = (function() {
     speakSequence(items);
   }
 
-  // ── MODO PODCAST ──────────────────────────────────────────────────
-  // Escucha pregunta BG → pregunta ES → respuestas BG+ES → explicación ES
-  // Sin interacción del usuario
+  var _podcastActive = false; // kept for compat
+
+  // ── MODO PODCAST (motor robusto para Android) ──────────────────────
+  var _pod = { active:false, paused:false, idx:0, list:[], timer:null };
+
+  function _hardStop() {
+    _pod.active = false;
+    _pod.paused = false;
+    _podcastActive = false;
+    if (_pod.timer) { clearTimeout(_pod.timer); _pod.timer = null; }
+    try { window.speechSynthesis.cancel(); } catch(e){}
+  }
+
   function startPodcast(questions) {
-    if (!questions || !questions.length) { toast('Sin preguntas para el podcast'); return; }
+    if (!questions || !questions.length) { toast('Sin preguntas'); return; }
+    _hardStop();
+    _pod.active = true;
     _podcastActive = true;
-    _podcastIdx = 0;
-    _podcastList = questions;
+    _pod.paused = false;
+    _pod.idx = 0;
+    _pod.list = questions.filter(function(q){ return q.bg||q.es; });
     _showPodcastUI(true);
-    _playPodcastItem();
+    setTimeout(_playPodcastItem, 300);
   }
 
   function _buildPodcastItems(q) {
     var items = [];
     var correctAs = (q.a||[]).filter(function(a){return a.ok;});
-
-    // 1. Número de pregunta
-    items.push({text:'Pregunta '+((_podcastIdx)+1)+' de '+_podcastList.length, lang:'es-ES', rate:_speed_es});
-    // Pausa
-    items.push({text:' ', lang:'es-ES', rate:1, pause:300});
-
-    // 2. Pregunta en BG
-    if (q.bg) items.push({text:q.bg, lang:'bg-BG', rate:_speed_bg});
-    // Pausa
-    items.push({text:' ', lang:'es-ES', rate:1, pause:500});
-
-    // 3. Pregunta en ES
-    if (q.es) items.push({text:q.es, lang:'es-ES', rate:_speed_es});
-    // Pausa
-    items.push({text:' ', lang:'es-ES', rate:1, pause:600});
-
-    // 4. "La respuesta correcta es:"
-    items.push({text:'La respuesta correcta es:', lang:'es-ES', rate:_speed_es});
-    items.push({text:' ', lang:'es-ES', rate:1, pause:200});
-
-    // 5. Cada respuesta correcta BG → ES
-    correctAs.forEach(function(a) {
-      if (a.t) items.push({text:a.t, lang:'bg-BG', rate:_speed_bg});
-      items.push({text:' ', lang:'es-ES', rate:1, pause:300});
-      if (a.es) items.push({text:a.es, lang:'es-ES', rate:_speed_es});
-      items.push({text:' ', lang:'es-ES', rate:1, pause:400});
+    items.push({text:'Pregunta '+(_pod.idx+1)+' de '+_pod.list.length, lang:'es-ES', rate:_speed_es, pause:0});
+    if (q.bg) items.push({text:q.bg, lang:'bg-BG', rate:_speed_bg, pause:400});
+    if (q.es) items.push({text:q.es, lang:'es-ES', rate:_speed_es, pause:500});
+    items.push({text:'La respuesta correcta es:', lang:'es-ES', rate:_speed_es, pause:300});
+    correctAs.forEach(function(a){
+      if (a.t) items.push({text:a.t, lang:'bg-BG', rate:_speed_bg, pause:200});
+      if (a.es) items.push({text:a.es, lang:'es-ES', rate:_speed_es, pause:300});
     });
-
-    // 6. Explicación en ES
     if (q.explain) {
-      items.push({text:'Explicación:', lang:'es-ES', rate:_speed_es});
-      items.push({text:' ', lang:'es-ES', rate:1, pause:200});
-      // Limpiar emojis y ⚠️ para TTS
-      var expClean = q.explain.replace(/[⚠️🔥⚡📍✅❌💎🎯📋🎬]/g,'').trim();
-      items.push({text:expClean, lang:'es-ES', rate:_speed_es});
+      var exp = q.explain.replace(/[⚠️🔥⚡📍✅❌💎🎯📋🎬]/g,'').trim();
+      items.push({text:'Explicación.', lang:'es-ES', rate:_speed_es, pause:300});
+      items.push({text:exp, lang:'es-ES', rate:_speed_es, pause:0});
     }
-
-    // Pausa larga entre preguntas
-    items.push({text:' ', lang:'es-ES', rate:1, pause:1200});
-
-    return items;
+    return items.filter(function(it){ return it.text && it.text.trim().length > 1; });
   }
 
   function _playPodcastItem() {
-    if (!_podcastActive || _podcastIdx >= _podcastList.length) {
-      _endPodcast();
+    if (!_pod.active || _pod.paused) return;
+    if (_pod.idx >= _pod.list.length) {
+      _hardStop();
+      _showPodcastUI(false);
+      toast('🎧 Podcast completado');
       return;
     }
-    var q = _podcastList[_podcastIdx];
     _updatePodcastUI();
-    var items = _buildPodcastItems(q);
-    // Filtrar items de pausa vacíos (SpeechSynthesis no admite texto vacío en todos los browsers)
-    items = items.filter(function(it){ return it.text && it.text.trim(); });
-    speakSequence(items, function() {
-      _podcastIdx++;
-      _playPodcastItem();
+    var items = _buildPodcastItems(_pod.list[_pod.idx]);
+    _playSeq(items, 0, function(){
+      if (!_pod.active || _pod.paused) return;
+      _pod.idx++;
+      _pod.timer = setTimeout(_playPodcastItem, 800);
     });
   }
 
+  function _playSeq(items, i, onDone) {
+    if (!_pod.active || _pod.paused || i >= items.length) {
+      if (_pod.active && !_pod.paused && onDone) onDone();
+      return;
+    }
+    var item = items[i];
+    var u = new SpeechSynthesisUtterance(item.text);
+    u.lang = item.lang || 'bg-BG';
+    u.rate = item.rate || _speed_bg;
+    var voice = (item.lang||'').startsWith('es') ? _voiceES : _voiceBG;
+    if (voice) u.voice = voice;
+    u.onend = function(){
+      if (!_pod.active || _pod.paused) return;
+      var pause = item.pause || 0;
+      if (pause > 0) {
+        _pod.timer = setTimeout(function(){ _playSeq(items, i+1, onDone); }, pause);
+      } else {
+        _playSeq(items, i+1, onDone);
+      }
+    };
+    u.onerror = function(){ _playSeq(items, i+1, onDone); };
+    try { window.speechSynthesis.speak(u); } catch(e){ _playSeq(items, i+1, onDone); }
+  }
+
   function pausePodcast() {
-    if (!window.speechSynthesis) return;
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
+    if (!_pod.active) return;
+    if (_pod.paused) {
+      _pod.paused = false;
+      try { window.speechSynthesis.resume(); } catch(e){}
       var btn = document.getElementById('pod-play');
       if (btn) btn.textContent = '⏸ Pausar';
+      // Android resume bug: si no reanuda, relanzar
+      setTimeout(function(){
+        if (_pod.active && !_pod.paused && !window.speechSynthesis.speaking) {
+          try { window.speechSynthesis.cancel(); } catch(e){}
+          setTimeout(_playPodcastItem, 200);
+        }
+      }, 600);
     } else {
-      window.speechSynthesis.pause();
+      _pod.paused = true;
+      if (_pod.timer) { clearTimeout(_pod.timer); _pod.timer = null; }
+      try { window.speechSynthesis.pause(); } catch(e){}
       var btn = document.getElementById('pod-play');
       if (btn) btn.textContent = '▶ Continuar';
     }
   }
 
   function nextPodcast() {
-    window.speechSynthesis.cancel();
-    _podcastIdx++;
-    if (_podcastIdx < _podcastList.length) _playPodcastItem();
-    else _endPodcast();
+    if (_pod.timer) clearTimeout(_pod.timer);
+    try { window.speechSynthesis.cancel(); } catch(e){}
+    _pod.paused = false;
+    _pod.idx = Math.min(_pod.idx+1, _pod.list.length-1);
+    _pod.timer = setTimeout(_playPodcastItem, 300);
   }
 
   function prevPodcast() {
-    window.speechSynthesis.cancel();
-    _podcastIdx = Math.max(0, _podcastIdx-1);
-    _playPodcastItem();
+    if (_pod.timer) clearTimeout(_pod.timer);
+    try { window.speechSynthesis.cancel(); } catch(e){}
+    _pod.paused = false;
+    _pod.idx = Math.max(_pod.idx-1, 0);
+    _pod.timer = setTimeout(_playPodcastItem, 300);
   }
 
   function stopPodcast() {
-    _podcastActive = false;
-    _podcastIdx = 0;
-    _podcastList = [];
-    // Android necesita cancel + pequeño delay para limpiar la cola
-    try {
-      window.speechSynthesis.cancel();
-      setTimeout(function(){ window.speechSynthesis.cancel(); }, 150);
-    } catch(e) {}
+    _hardStop();
     _showPodcastUI(false);
   }
 
-  function _endPodcast() {
-    _podcastActive = false;
-    _showPodcastUI(false);
-    toast('🎧 Podcast completado — '+_podcastList.length+' preguntas');
-  }
-
-  function _showPodcastUI(show) {
+  function _showPodcastUI(visible) {
     var panel = document.getElementById('pod-panel');
-    if (panel) panel.style.display = show ? 'flex' : 'none';
+    if (panel) panel.style.display = visible ? 'flex' : 'none';
   }
 
   function _updatePodcastUI() {
     var lbl = document.getElementById('pod-lbl');
-    if (lbl) lbl.textContent = 'Preg '+(_podcastIdx+1)+'/'+_podcastList.length;
+    if (lbl) lbl.textContent = 'Preg '+(_pod.idx+1)+'/'+_pod.list.length;
+    var btn = document.getElementById('pod-play');
+    if (btn) btn.textContent = '⏸ Pausar';
   }
 
-  // Toggle auto-leer
+  function isPodcastActive() { return _pod.active; }
   function toggleAutoRead() {
     _autoRead = !_autoRead;
     localStorage.setItem('tts_auto', _autoRead?'1':'0');
