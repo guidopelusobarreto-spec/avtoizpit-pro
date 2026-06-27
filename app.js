@@ -1833,8 +1833,6 @@ function sendT(){
 
 // ── INIT ──────────────────────────────────────
 function initApp(){
-  // Solo inicializar — NO mostrar home
-  // La navegación la maneja doLogin() después de verificar contraseña
   initTTS();
   applyTheme(localStorage.getItem('theme')||'dark');
   if (window.speechSynthesis) {
@@ -1844,11 +1842,10 @@ function initApp(){
   checkAndScheduleNotif();
 }
 
-// Llamado por doLogin() después de verificar contraseña
 function afterLogin(){
   uhome();
   setTimeout(function(){
-    try{doCoach();}catch(e){
+    try{ doCoach(); }catch(e){
       var el=document.getElementById('coach-msg');
       if(el) el.textContent='Bienvenido! Empieza por F1: Casi-Seguras.';
     }

@@ -648,31 +648,20 @@ window.onerror = function(msg, src, line, col, err) {
     buildAll();
     if (typeof initApp === 'function') initApp();
 
-    // Verificar sesión de contraseña
+    // pw-screen ya está visible en el HTML (display:flex)
+    // Solo verificar si hay sesión válida para saltarla
     var session = localStorage.getItem('pw_session');
     var valid = session && (Date.now() - parseInt(session)) < 86400000; // 1 día
     if (valid) {
       doLogin();
-    } else {
-      var pwScreen = document.getElementById('pw-screen');
-      if (pwScreen) pwScreen.style.display = 'flex';
-      // Enfocar el campo de contraseña
-      setTimeout(function(){
-        var inp = document.getElementById('pw-inp');
-        if (inp) inp.focus();
-      }, 300);
     }
+    // Si no hay sesión válida: pw-screen ya es visible, no hacer nada más
   }
 
   function doLogin() {
     var pwScreen = document.getElementById('pw-screen');
     if (pwScreen) pwScreen.style.display = 'none';
     if (typeof afterLogin === 'function') afterLogin();
-    else {
-      if (typeof show === 'function') show('home');
-      if (typeof uhome === 'function') uhome();
-      if (typeof doCoach === 'function') setTimeout(doCoach, 300);
-    }
   }
 
   function doPW() {
