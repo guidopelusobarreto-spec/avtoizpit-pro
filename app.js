@@ -1032,7 +1032,10 @@ window.startPodcastMode = startPodcastMode;
 window.pausePodcast  = function(){ TTS.pausePodcast(); };
 window.nextPodcast   = function(){ TTS.nextPodcast(); };
 window.prevPodcast   = function(){ TTS.prevPodcast(); };
-window.stopPodcast   = function(){ TTS.stopPodcast(); show('home'); };
+window.stopPodcast   = function(){
+  TTS.stopPodcast();
+  setTimeout(function(){ show('home'); }, 400);
+};
 
 // ── MISIÓN DEL DÍA ────────────────────────────────────────────────
 function openMisionDia() {
