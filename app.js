@@ -1469,7 +1469,13 @@ var TTS = (function() {
 
   function stopPodcast() {
     _podcastActive = false;
-    window.speechSynthesis.cancel();
+    _podcastIdx = 0;
+    _podcastList = [];
+    // Android necesita cancel + pequeño delay para limpiar la cola
+    try {
+      window.speechSynthesis.cancel();
+      setTimeout(function(){ window.speechSynthesis.cancel(); }, 150);
+    } catch(e) {}
     _showPodcastUI(false);
   }
 
