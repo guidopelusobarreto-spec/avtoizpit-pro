@@ -1362,12 +1362,32 @@ var TTS = (function() {
   // Auto-leer pregunta cuando aparece (modo interactivo)
   function autoReadQuestion(q) {
     if (!_autoRead || !q) return;
-    var items = [];
-    // Pregunta en BG
-    if (q.bg) items.push({text: q.bg, lang:'bg-BG', rate:_speed_bg});
-    // Pausa 400ms
-    if (q.es) items.push({text: q.es, lang:'es-ES', rate:_speed_es, pause:400});
-    speakSequence(items);
+    if (!window.speechSynthesis) return;
+    try { window.speechSynthesis.cancel(); } catch(e){}
+    setTimeout(function(){
+      if (!_autoRead) return;
+      // BG primero
+      if (q.bg) {
+        var u1 = new SpeechSynthesisUtterance(q.bg);
+        u1.lang = 'bg-BG'; u1.rate = _speed_bg;
+        if (_voiceBG) u1.voice = _voiceBG;
+        u1.onend = function(){
+          if (!_autoRead || !q.es) return;
+          setTimeout(function(){
+            var u2 = new SpeechSynthesisUtterance(q.es);
+            u2.lang = 'es-ES'; u2.rate = _speed_es;
+            if (_voiceES) u2.voice = _voiceES;
+            try { window.speechSynthesis.speak(u2); } catch(e){}
+          }, 400);
+        };
+        try { window.speechSynthesis.speak(u1); } catch(e){}
+      } else if (q.es) {
+        var u = new SpeechSynthesisUtterance(q.es);
+        u.lang = 'es-ES'; u.rate = _speed_es;
+        if (_voiceES) u.voice = _voiceES;
+        try { window.speechSynthesis.speak(u); } catch(e){}
+      }
+    }, 300);
   }
 
   var _podcastActive = false; // kept for compat
@@ -1483,25 +1503,26 @@ var TTS = (function() {
   function pausePodcast() {
     if (!_pod.active) return;
     if (_pod.paused) {
-      // CONTINUAR — relanzar desde la posición guardada
+      // CONTINUAR
       _pod.paused = false;
       var btn = document.getElementById('pod-play');
       if (btn) btn.textContent = '⏸ Pausar';
-      // Si estábamos en medio de una pregunta, reanudar desde el item actual
-      // Si estábamos entre preguntas (items vacío), ir a la siguiente pregunta
-      if (_pod.items.length > 0) {
-        _pod.timer = setTimeout(_playItem, 300);
-      } else {
-        _pod.timer = setTimeout(_playQuestion, 300);
-      }
+      // Android: cancel() primero para limpiar estado bloqueado, luego relanzar
+      try { window.speechSynthesis.cancel(); } catch(e){}
+      setTimeout(function(){
+        if (!_pod.active || _pod.paused) return;
+        if (_pod.items && _pod.items.length > 0 && _pod.itemIdx < _pod.items.length) {
+          _playItem();
+        } else {
+          _playQuestion();
+        }
+      }, 500);
     } else {
-      // PAUSAR — cancelar audio y guardar posición
+      // PAUSAR
       _pod.paused = true;
-      _podCancel(); // cancela el utterance actual Y el timer
+      _podCancel();
       var btn = document.getElementById('pod-play');
       if (btn) btn.textContent = '▶ Continuar';
-      // itemIdx ya apunta al item que se estaba reproduciendo
-      // al continuar lo relanzamos desde ahí
     }
   }
 
@@ -1541,6 +1562,7 @@ var TTS = (function() {
   }
 
   function isPodcastActive() { return _pod.active; }
+
   function toggleAutoRead() {
     _autoRead = !_autoRead;
     localStorage.setItem('tts_auto', _autoRead?'1':'0');
@@ -1553,7 +1575,6 @@ var TTS = (function() {
   function setSpeedBG(s) { _speed_bg=s; localStorage.setItem('tts_speed',s); }
   function setSpeedES(s) { _speed_es=s; localStorage.setItem('tts_speed_es',s); }
   function isAutoRead() { return _autoRead; }
-  function isPodcastActive() { return _podcastActive; }
 
   init();
 
