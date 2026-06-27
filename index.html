@@ -641,6 +641,7 @@ window.onerror = function(msg, src, line, col, err) {
 
   function startApp() {
     buildAll();
+    if (typeof initApp === 'function') initApp();
 
     // Verificar sesión de contraseña
     var session = localStorage.getItem('pw_session');
@@ -650,15 +651,23 @@ window.onerror = function(msg, src, line, col, err) {
     } else {
       var pwScreen = document.getElementById('pw-screen');
       if (pwScreen) pwScreen.style.display = 'flex';
+      // Enfocar el campo de contraseña
+      setTimeout(function(){
+        var inp = document.getElementById('pw-inp');
+        if (inp) inp.focus();
+      }, 300);
     }
   }
 
   function doLogin() {
     var pwScreen = document.getElementById('pw-screen');
     if (pwScreen) pwScreen.style.display = 'none';
-    if (typeof show === 'function') show('home');
-    if (typeof uhome === 'function') uhome();
-    if (typeof doCoach === 'function') setTimeout(doCoach, 300);
+    if (typeof afterLogin === 'function') afterLogin();
+    else {
+      if (typeof show === 'function') show('home');
+      if (typeof uhome === 'function') uhome();
+      if (typeof doCoach === 'function') setTimeout(doCoach, 300);
+    }
   }
 
   function doPW() {

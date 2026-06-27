@@ -1372,15 +1372,35 @@ var TTS = (function() {
 
   var _podcastActive = false; // kept for compat
 
-  // ── MODO PODCAST (motor robusto para Android) ──────────────────────
-  var _pod = { active:false, paused:false, idx:0, list:[], timer:null };
+  // ── MODO PODCAST ──────────────────────────────────────────────────
+  // Android no soporta pause/resume de SpeechSynthesis correctamente.
+  // Estrategia: guardamos posición exacta (pregunta + item dentro de la pregunta)
+  // Al pausar: cancel() + guardar posición
+  // Al continuar: relanzar desde la posición guardada
+  // Al stop: cancel() + limpiar todo
+
+  var _pod = {
+    active:  false,
+    paused:  false,
+    idx:     0,      // índice de pregunta actual
+    itemIdx: 0,      // índice de item dentro de la pregunta actual
+    list:    [],
+    items:   [],     // items de la pregunta actual (para reanudar desde itemIdx)
+    timer:   null
+  };
+
+  function _podCancel() {
+    if (_pod.timer) { clearTimeout(_pod.timer); _pod.timer = null; }
+    try { window.speechSynthesis.cancel(); } catch(e){}
+  }
 
   function _hardStop() {
     _pod.active = false;
     _pod.paused = false;
     _podcastActive = false;
-    if (_pod.timer) { clearTimeout(_pod.timer); _pod.timer = null; }
-    try { window.speechSynthesis.cancel(); } catch(e){}
+    _pod.items = [];
+    _pod.itemIdx = 0;
+    _podCancel();
   }
 
   function startPodcast(questions) {
@@ -1392,29 +1412,29 @@ var TTS = (function() {
     _pod.idx = 0;
     _pod.list = questions.filter(function(q){ return q.bg||q.es; });
     _showPodcastUI(true);
-    setTimeout(_playPodcastItem, 300);
+    _pod.timer = setTimeout(_playQuestion, 300);
   }
 
-  function _buildPodcastItems(q) {
+  function _buildItems(q, qIdx, total) {
     var items = [];
     var correctAs = (q.a||[]).filter(function(a){return a.ok;});
-    items.push({text:'Pregunta '+(_pod.idx+1)+' de '+_pod.list.length, lang:'es-ES', rate:_speed_es, pause:0});
-    if (q.bg) items.push({text:q.bg, lang:'bg-BG', rate:_speed_bg, pause:400});
-    if (q.es) items.push({text:q.es, lang:'es-ES', rate:_speed_es, pause:500});
-    items.push({text:'La respuesta correcta es:', lang:'es-ES', rate:_speed_es, pause:300});
+    items.push({text:'Pregunta '+(qIdx+1)+' de '+total, lang:'es-ES', rate:_speed_es});
+    if (q.bg) items.push({text:q.bg, lang:'bg-BG', rate:_speed_bg});
+    if (q.es) items.push({text:q.es, lang:'es-ES', rate:_speed_es});
+    items.push({text:'La respuesta correcta es:', lang:'es-ES', rate:_speed_es});
     correctAs.forEach(function(a){
-      if (a.t) items.push({text:a.t, lang:'bg-BG', rate:_speed_bg, pause:200});
-      if (a.es) items.push({text:a.es, lang:'es-ES', rate:_speed_es, pause:300});
+      if (a.t)  items.push({text:a.t,  lang:'bg-BG', rate:_speed_bg});
+      if (a.es) items.push({text:a.es, lang:'es-ES', rate:_speed_es});
     });
     if (q.explain) {
       var exp = q.explain.replace(/[⚠️🔥⚡📍✅❌💎🎯📋🎬]/g,'').trim();
-      items.push({text:'Explicación.', lang:'es-ES', rate:_speed_es, pause:300});
-      items.push({text:exp, lang:'es-ES', rate:_speed_es, pause:0});
+      items.push({text:'Explicación.', lang:'es-ES', rate:_speed_es});
+      items.push({text:exp, lang:'es-ES', rate:_speed_es});
     }
     return items.filter(function(it){ return it.text && it.text.trim().length > 1; });
   }
 
-  function _playPodcastItem() {
+  function _playQuestion() {
     if (!_pod.active || _pod.paused) return;
     if (_pod.idx >= _pod.list.length) {
       _hardStop();
@@ -1423,75 +1443,84 @@ var TTS = (function() {
       return;
     }
     _updatePodcastUI();
-    var items = _buildPodcastItems(_pod.list[_pod.idx]);
-    _playSeq(items, 0, function(){
-      if (!_pod.active || _pod.paused) return;
-      _pod.idx++;
-      _pod.timer = setTimeout(_playPodcastItem, 800);
-    });
+    _pod.items = _buildItems(_pod.list[_pod.idx], _pod.idx, _pod.list.length);
+    _pod.itemIdx = 0;
+    _playItem();
   }
 
-  function _playSeq(items, i, onDone) {
-    if (!_pod.active || _pod.paused || i >= items.length) {
-      if (_pod.active && !_pod.paused && onDone) onDone();
+  function _playItem() {
+    if (!_pod.active || _pod.paused) return;
+    if (_pod.itemIdx >= _pod.items.length) {
+      // Pregunta terminada — pasar a la siguiente
+      _pod.idx++;
+      _pod.items = [];
+      _pod.itemIdx = 0;
+      _pod.timer = setTimeout(_playQuestion, 900);
       return;
     }
-    var item = items[i];
+    var item = _pod.items[_pod.itemIdx];
     var u = new SpeechSynthesisUtterance(item.text);
-    u.lang = item.lang || 'bg-BG';
-    u.rate = item.rate || _speed_bg;
+    u.lang  = item.lang || 'bg-BG';
+    u.rate  = item.rate || _speed_bg;
     var voice = (item.lang||'').startsWith('es') ? _voiceES : _voiceBG;
     if (voice) u.voice = voice;
     u.onend = function(){
-      if (!_pod.active || _pod.paused) return;
-      var pause = item.pause || 0;
-      if (pause > 0) {
-        _pod.timer = setTimeout(function(){ _playSeq(items, i+1, onDone); }, pause);
-      } else {
-        _playSeq(items, i+1, onDone);
-      }
+      if (!_pod.active || _pod.paused) return; // pausa o stop en medio
+      _pod.itemIdx++;
+      _pod.timer = setTimeout(_playItem, 350);
     };
-    u.onerror = function(){ _playSeq(items, i+1, onDone); };
-    try { window.speechSynthesis.speak(u); } catch(e){ _playSeq(items, i+1, onDone); }
+    u.onerror = function(){
+      if (!_pod.active) return;
+      _pod.itemIdx++;
+      _pod.timer = setTimeout(_playItem, 200);
+    };
+    try { window.speechSynthesis.speak(u); } catch(e){
+      _pod.itemIdx++;
+      _pod.timer = setTimeout(_playItem, 200);
+    }
   }
 
   function pausePodcast() {
     if (!_pod.active) return;
     if (_pod.paused) {
+      // CONTINUAR — relanzar desde la posición guardada
       _pod.paused = false;
-      try { window.speechSynthesis.resume(); } catch(e){}
       var btn = document.getElementById('pod-play');
       if (btn) btn.textContent = '⏸ Pausar';
-      // Android resume bug: si no reanuda, relanzar
-      setTimeout(function(){
-        if (_pod.active && !_pod.paused && !window.speechSynthesis.speaking) {
-          try { window.speechSynthesis.cancel(); } catch(e){}
-          setTimeout(_playPodcastItem, 200);
-        }
-      }, 600);
+      // Si estábamos en medio de una pregunta, reanudar desde el item actual
+      // Si estábamos entre preguntas (items vacío), ir a la siguiente pregunta
+      if (_pod.items.length > 0) {
+        _pod.timer = setTimeout(_playItem, 300);
+      } else {
+        _pod.timer = setTimeout(_playQuestion, 300);
+      }
     } else {
+      // PAUSAR — cancelar audio y guardar posición
       _pod.paused = true;
-      if (_pod.timer) { clearTimeout(_pod.timer); _pod.timer = null; }
-      try { window.speechSynthesis.pause(); } catch(e){}
+      _podCancel(); // cancela el utterance actual Y el timer
       var btn = document.getElementById('pod-play');
       if (btn) btn.textContent = '▶ Continuar';
+      // itemIdx ya apunta al item que se estaba reproduciendo
+      // al continuar lo relanzamos desde ahí
     }
   }
 
   function nextPodcast() {
-    if (_pod.timer) clearTimeout(_pod.timer);
-    try { window.speechSynthesis.cancel(); } catch(e){}
+    _podCancel();
     _pod.paused = false;
     _pod.idx = Math.min(_pod.idx+1, _pod.list.length-1);
-    _pod.timer = setTimeout(_playPodcastItem, 300);
+    _pod.items = [];
+    _pod.itemIdx = 0;
+    _pod.timer = setTimeout(_playQuestion, 300);
   }
 
   function prevPodcast() {
-    if (_pod.timer) clearTimeout(_pod.timer);
-    try { window.speechSynthesis.cancel(); } catch(e){}
+    _podCancel();
     _pod.paused = false;
     _pod.idx = Math.max(_pod.idx-1, 0);
-    _pod.timer = setTimeout(_playPodcastItem, 300);
+    _pod.items = [];
+    _pod.itemIdx = 0;
+    _pod.timer = setTimeout(_playQuestion, 300);
   }
 
   function stopPodcast() {
@@ -1783,21 +1812,25 @@ function sendT(){
 
 // ── INIT ──────────────────────────────────────
 function initApp(){
-  buildAll();
+  // Solo inicializar — NO mostrar home
+  // La navegación la maneja doLogin() después de verificar contraseña
   initTTS();
-  // Aplicar tema guardado
   applyTheme(localStorage.getItem('theme')||'dark');
-  // Cargar voces TTS (asíncrono en algunos navegadores)
   if (window.speechSynthesis) {
     window.speechSynthesis.getVoices();
     window.speechSynthesis.onvoiceschanged = function(){};
   }
-  uhome();
-  setTimeout(function(){
-    try{doCoach();}catch(e){document.getElementById('coach-msg').textContent='Bienvenido! Empieza por el Set 1.';}
-    checkAndScheduleNotif();
-  },200);
+  checkAndScheduleNotif();
 }
 
-// Init — wrapper
-// init handled by inline script in index.html
+// Llamado por doLogin() después de verificar contraseña
+function afterLogin(){
+  uhome();
+  setTimeout(function(){
+    try{doCoach();}catch(e){
+      var el=document.getElementById('coach-msg');
+      if(el) el.textContent='Bienvenido! Empieza por F1: Casi-Seguras.';
+    }
+  },200);
+}
+window.afterLogin = afterLogin;
