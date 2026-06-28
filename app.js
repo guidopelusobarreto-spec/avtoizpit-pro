@@ -155,13 +155,25 @@ function buildAll() {
 
 // ── UI ────────────────────────────────────────
 function show(id) {
-  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
-  document.getElementById(id).classList.add('active');
-  if (id === 'home') { uhome(); doCoach(); }
-  if (id === 's-prog') rendProg();
-  if (id === 's-sett') {
-    var k = getAPIKey();
-    document.getElementById('api-key-status').textContent = k ? 'API key configurada' : 'Sin API key — el instructor no funcionara';
+  try {
+    document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+    var el = document.getElementById(id);
+    if (!el) { console.warn('[show] elemento no encontrado:', id); return; }
+    el.classList.add('active');
+    if (id === 'home') { try{uhome();}catch(e){console.warn(e);} try{doCoach();}catch(e){console.warn(e);} }
+    if (id === 's-prog') try{rendProg();}catch(e){console.warn(e);}
+    if (id === 's-sett') {
+      try {
+        var k = getAPIKey();
+        var el2 = document.getElementById('api-key-status');
+        if(el2) el2.textContent = k ? 'API key configurada' : 'Sin API key';
+      } catch(e){console.warn(e);}
+    }
+  } catch(e) {
+    console.error('[show] error:', e);
+    // Intentar mostrar home como fallback
+    var home = document.getElementById('home');
+    if (home) home.classList.add('active');
   }
 }
 function toast(msg, ms) {
@@ -1843,12 +1855,15 @@ function initApp(){
 }
 
 function afterLogin(){
-  uhome();
+  try {
+    show('home');
+  } catch(e) {
+    console.error('[afterLogin] error en show:', e);
+    var home = document.getElementById('home');
+    if (home) home.classList.add('active');
+  }
   setTimeout(function(){
-    try{ doCoach(); }catch(e){
-      var el=document.getElementById('coach-msg');
-      if(el) el.textContent='Bienvenido! Empieza por F1: Casi-Seguras.';
-    }
-  },200);
+    try{ doCoach(); }catch(e){ console.warn('[afterLogin] coach:', e); }
+  }, 300);
 }
 window.afterLogin = afterLogin;
