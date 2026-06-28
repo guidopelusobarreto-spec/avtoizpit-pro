@@ -178,17 +178,22 @@ function show(id) {
 }
 function toast(msg, ms) {
   var t = document.getElementById('toast');
+  if (!t) return;
   t.textContent = msg; t.classList.add('show');
   setTimeout(function() { t.classList.remove('show'); }, ms || 2500);
 }
 function uhome() {
-  var m = BRAIN.getMetrics();
-  document.getElementById('s-seen').textContent = m.seen;
-  var dom = Object.values(BRAIN.get().seen).filter(function(r) { return r.c >= 3 && r.w === 0; }).length;
-  document.getElementById('s-dom').textContent = dom;
-  document.getElementById('s-str').textContent = m.streak || 0;
-  document.getElementById('gpct').textContent = m.pct + '%';
-  document.getElementById('gbar').style.width = m.pct + '%';
+  try {
+    if (typeof BRAIN === 'undefined' || !ALL || !ALL.length) return;
+    var m = BRAIN.getMetrics();
+    var el;
+    el = document.getElementById('s-seen'); if(el) el.textContent = m.seen;
+    var dom = Object.values(BRAIN.get().seen||{}).filter(function(r){return r.c>=3&&r.w===0;}).length;
+    el = document.getElementById('s-dom'); if(el) el.textContent = dom;
+    el = document.getElementById('s-str'); if(el) el.textContent = m.streak||0;
+    el = document.getElementById('gpct'); if(el) el.textContent = m.pct+'%';
+    el = document.getElementById('gbar'); if(el) el.style.width = m.pct+'%';
+  } catch(e) { console.warn('[uhome]', e); }
 }
 function doCoach() {
   AGENTS.runCoach(function(res) {
@@ -1845,7 +1850,6 @@ function sendT(){
 
 // ── INIT ──────────────────────────────────────
 function initApp(){
-  initTTS();
   applyTheme(localStorage.getItem('theme')||'dark');
   if (window.speechSynthesis) {
     window.speechSynthesis.getVoices();
@@ -1855,15 +1859,8 @@ function initApp(){
 }
 
 function afterLogin(){
-  try {
-    show('home');
-  } catch(e) {
-    console.error('[afterLogin] error en show:', e);
-    var home = document.getElementById('home');
-    if (home) home.classList.add('active');
-  }
   setTimeout(function(){
-    try{ doCoach(); }catch(e){ console.warn('[afterLogin] coach:', e); }
+    try{ doCoach(); }catch(e){}
   }, 300);
 }
 window.afterLogin = afterLogin;
