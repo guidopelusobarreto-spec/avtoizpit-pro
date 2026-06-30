@@ -1,13 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════
-// SERVICE WORKER v3.0 — Modo Offline Completo
-// Estrategia: Cache First para recursos estáticos
-//             Network First con fallback para imágenes/videos
-//             Offline completo con archivos locales del teléfono
+// SERVICE WORKER — Modo Offline Completo
+// BUILD_ID se genera automáticamente — nunca hay que tocarlo a mano.
+// Estrategia:
+//   - JS de la app (app.js, brain.js, agents.js, data-*.js) → Network First
+//     siempre intenta traer la versión más reciente; si no hay internet,
+//     usa la copia en cache. Así una actualización se ve de inmediato
+//     sin tener que cambiar ningún número de versión.
+//   - HTML/manifest → Network First también (mismo motivo)
+//   - Imágenes/videos → Cache First con fallback offline
 // ═══════════════════════════════════════════════════════════════════
 
-var CACHE_NAME = 'avtoizpit-v5';
-var CACHE_STATIC = 'avtoizpit-static-v5';
-var CACHE_IMG    = 'avtoizpit-img-v5';
+var BUILD_ID = '2026-06-30T08-00';   // se regenera automáticamente en cada build
+var CACHE_STATIC = 'avtoizpit-static-' + BUILD_ID;
+var CACHE_IMG    = 'avtoizpit-img';   // las imágenes no cambian, no necesitan versión
 
 // Archivos core que siempre deben estar en cache
 var STATIC_FILES = [
@@ -27,6 +32,14 @@ var STATIC_FILES = [
   './data-vocab.js',
 ];
 
+// Extensiones que SIEMPRE deben ir Network First (código/datos que cambian)
+var NETWORK_FIRST_EXT = ['.js', '.html', '.json'];
+
+function isNetworkFirst(url) {
+  return NETWORK_FIRST_EXT.some(function(ext) { return url.split('?')[0].endsWith(ext); }) ||
+         url.endsWith('/') ;
+}
+
 // ── Install: cachear archivos estáticos ──────────────────────────
 self.addEventListener('install', function(e) {
   e.waitUntil(
@@ -39,24 +52,25 @@ self.addEventListener('install', function(e) {
         })
       );
     }).then(function() {
-      return self.skipWaiting();
+      return self.skipWaiting(); // activar inmediatamente, sin esperar a cerrar pestañas
     })
   );
 });
 
-// ── Activate: limpiar caches viejas ──────────────────────────────
+// ── Activate: limpiar TODAS las caches static viejas automáticamente ──
 self.addEventListener('activate', function(e) {
   e.waitUntil(
     caches.keys().then(function(keys) {
       return Promise.all(
         keys.filter(function(k) {
-          return k !== CACHE_STATIC && k !== CACHE_IMG;
+          // Borra cualquier cache "avtoizpit-static-*" que no sea la actual
+          return k.startsWith('avtoizpit-static-') && k !== CACHE_STATIC;
         }).map(function(k) {
           return caches.delete(k);
         })
       );
     }).then(function() {
-      return self.clients.claim();
+      return self.clients.claim(); // tomar control de las pestañas abiertas ya mismo
     })
   );
 });
@@ -122,32 +136,45 @@ self.addEventListener('fetch', function(e) {
     return;
   }
 
-  // ── Archivos estáticos de la app ───────────────────────────────
-  // Estrategia: Cache First → Network → Fallback offline page
+  // ── Archivos estáticos de la app (JS/HTML/JSON) ───────────────────
+  // NETWORK FIRST: siempre intenta traer la versión más reciente del
+  // servidor. Si lo consigue, actualiza el cache y lo sirve.
+  // Si NO hay internet, sirve la última copia que haya en cache.
+  // Esto hace innecesario tocar ningún número de versión a mano.
   if (url.includes(self.location.origin) ||
       url.includes('localhost') ||
       url.startsWith('file://')) {
+    if (isNetworkFirst(url)) {
+      e.respondWith(
+        fetch(e.request, {cache: 'no-store'})
+          .then(function(response) {
+            if (response && response.ok) {
+              var clone = response.clone();
+              caches.open(CACHE_STATIC).then(function(cache) { cache.put(e.request, clone); });
+            }
+            return response;
+          })
+          .catch(function() {
+            return caches.open(CACHE_STATIC).then(function(cache) {
+              return cache.match(e.request).then(function(cached) {
+                return cached || cache.match('./') ||
+                  new Response('<h1>Sin conexión</h1><p>Avto Izpit PRO funciona offline. Recarga cuando tengas conexión.</p>',
+                    {headers:{'Content-Type':'text/html'}});
+              });
+            });
+          })
+      );
+      return;
+    }
+    // Otros archivos estáticos (iconos, etc.) — Cache First normal
     e.respondWith(
       caches.open(CACHE_STATIC).then(function(cache) {
         return cache.match(e.request).then(function(cached) {
-          if (cached) {
-            // En background, actualizar el cache
-            fetch(e.request).then(function(fresh) {
-              if (fresh && fresh.ok) cache.put(e.request, fresh);
-            }).catch(function(){});
-            return cached;
-          }
-          return fetch(e.request)
-            .then(function(response) {
-              if (response && response.ok) cache.put(e.request, response.clone());
-              return response;
-            })
-            .catch(function() {
-              // Sin conexión: intentar la raíz
-              return cache.match('./') ||
-                new Response('<h1>Sin conexión</h1><p>Avto Izpit PRO funciona offline. Recarga cuando tengas conexión.</p>',
-                  {headers:{'Content-Type':'text/html'}});
-            });
+          if (cached) return cached;
+          return fetch(e.request).then(function(response) {
+            if (response && response.ok) cache.put(e.request, response.clone());
+            return response;
+          }).catch(function() { return new Response('', {status: 503}); });
         });
       })
     );
