@@ -17,12 +17,10 @@ function loadImg(el, id) {
   var localSrc, onlineSrc;
 
   if (typeof id === 'string' && id.startsWith('http')) {
-    // Caso 1: URL completa — extraer solo el nombre del archivo para local
-    var filename = id.split('/').pop(); // ej: "60317.png"
+    var filename = id.split('/').pop();
     localSrc  = IMG_LOC + filename;
-    onlineSrc = id; // usar la URL original directamente
+    onlineSrc = id;
   } else {
-    // Caso 2: ID numérico de avtoizpit
     localSrc  = IMG_LOC + id + '.png';
     onlineSrc = IMG + id + '.png?quality=2';
   }
@@ -33,8 +31,11 @@ function loadImg(el, id) {
       // Local falló — intentar online
       this.src = onlineSrc;
     } else {
-      // Online también falló — ocultar
-      this.style.display = 'none';
+      // Online también falló — mostrar placeholder visible en vez de ocultar
+      this.onerror = null;
+      this.style.display = '';
+      this.alt = '🖼️ Imagen no disponible (ID: ' + id + ')';
+      this.style.cssText += ';min-height:60px;display:flex;align-items:center;justify-content:center;background:var(--bg3);color:var(--fg3);font-size:11px;text-align:center;border:1px dashed var(--bg4)';
     }
   };
 }
