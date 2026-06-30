@@ -5,9 +5,9 @@
 //             Offline completo con archivos locales del teléfono
 // ═══════════════════════════════════════════════════════════════════
 
-var CACHE_NAME = 'avtoizpit-v4';
-var CACHE_STATIC = 'avtoizpit-static-v4';
-var CACHE_IMG    = 'avtoizpit-img-v4';
+var CACHE_NAME = 'avtoizpit-v5';
+var CACHE_STATIC = 'avtoizpit-static-v5';
+var CACHE_IMG    = 'avtoizpit-img-v5';
 
 // Archivos core que siempre deben estar en cache
 var STATIC_FILES = [
