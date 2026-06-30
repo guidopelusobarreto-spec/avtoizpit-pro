@@ -255,7 +255,7 @@ function startSet(i) {
 
 // ── MODOS ─────────────────────────────────────
 function mod(m) {
-  var qs, title, sub, explain=true, exam=false, timed=false, timeLimit=0;
+  var qs, title, sub, explain=true, exam=false, timed=false, timeLimit=0, dryRun=false;
   if (m === 'srs') {
     qs = AGENTS.getSRSQueue(ALL);
     if (!qs.length) { toast('Sin preguntas pendientes hoy!'); return; }
@@ -311,7 +311,7 @@ function mod(m) {
     qs = AGENTS.buildRealExam(ALL, VIDS);
     title = '📋 Examen Seco'; sub = 'Sin feedback • 45 preg • 40 min • condiciones reales';
     explain=false; exam=true; timed=true; timeLimit=2400;
-    opts = Object.assign({}, opts||{}, {dryRun:true});
+    dryRun = true;
   } else if (m === 'fase1') {
     qs = AGENTS.buildFase1(ALL);
     if (!qs.length) { toast('Sin preguntas F1'); return; }
@@ -399,7 +399,7 @@ function mod(m) {
     title = 'Banco Completo'; sub = ALL.length + ' preg disponibles';
   }
   if (!qs || !qs.length) { toast('Sin preguntas disponibles'); return; }
-  begin({mode:m, title:title, sub:sub, qs:qs, explain:explain, exam:exam, timed:timed, timeLimit:timeLimit});
+  begin({mode:m, title:title, sub:sub, qs:qs, explain:explain, exam:exam, timed:timed, timeLimit:timeLimit, dryRun:dryRun});
 }
 
 // ── SESION ────────────────────────────────────
