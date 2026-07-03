@@ -119,6 +119,18 @@ var BRAIN = (function() {
       iv = 1;
     }
 
+    // Compresión por fecha de examen: cada pregunta debe caber ~3 repasos
+    // antes del día D. Sin fecha configurada, intervalos normales.
+    try {
+      var _ed = localStorage.getItem('exam_date');
+      if (_ed) {
+        var _ex = new Date(_ed + 'T00:00:00');
+        var _tdy = new Date(); _tdy.setHours(0,0,0,0);
+        var _dLeft = Math.round((_ex - _tdy) / 86400000);
+        if (_dLeft > 0) iv = Math.min(iv, Math.max(1, Math.floor(_dLeft/3)));
+      }
+    } catch(e) {}
+
     r.iv = iv;
     var due = new Date(); due.setDate(due.getDate()+iv);
     r.due = due.toDateString();

@@ -114,6 +114,48 @@ function saveAPIKey() {
   toast('API key guardada');
 }
 function getAPIKey() { return localStorage.getItem('claude_api_key') || ''; }
+
+// ─── Fecha de examen ──────────────────────────────────────────────
+function getExamDate() { return localStorage.getItem('exam_date') || ''; }
+
+function daysToExam() {
+  var d = getExamDate();
+  if (!d) return null;
+  var exam = new Date(d + 'T00:00:00');
+  if (isNaN(exam.getTime())) return null;
+  var today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((exam - today) / 86400000);
+}
+
+function saveExamDate() {
+  var inp = document.getElementById('exam-date-inp');
+  var st  = document.getElementById('exam-date-status');
+  var v = inp ? inp.value : '';
+  if (!v) {
+    localStorage.removeItem('exam_date');
+    if (st) st.textContent = 'Sin fecha — repasos con intervalos normales';
+    renderExamCountdown();
+    return;
+  }
+  localStorage.setItem('exam_date', v);
+  var n = daysToExam();
+  if (st) st.textContent = n === null ? '' :
+    n < 0  ? '⚠️ Esa fecha ya pasó — actualízala' :
+    n === 0 ? '¡El examen es HOY! Успех! 🍀' :
+    'Guardado: faltan ' + n + ' día' + (n===1?'':'s');
+  renderExamCountdown();
+}
+
+function renderExamCountdown() {
+  var el = document.getElementById('exam-countdown');
+  if (!el) return;
+  var n = daysToExam();
+  if (n === null || n < 0) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = n === 0
+    ? '🎯 <b>¡El examen es HOY!</b> Успех! 🍀'
+    : '🎯 <b>' + n + ' día' + (n===1?'':'s') + '</b> para el examen · objetivo 97/97 en &lt;20 min';
+}
 function setSpeed(s) {
   TTS_SPEED = s;
   localStorage.setItem('tts_speed', String(s));
@@ -161,13 +203,22 @@ function show(id) {
     var el = document.getElementById(id);
     if (!el) { console.warn('[show] elemento no encontrado:', id); return; }
     el.classList.add('active');
-    if (id === 'home') { try{uhome();}catch(e){console.warn(e);} try{doCoach();}catch(e){console.warn(e);} }
+    if (id === 'home') { try{uhome();}catch(e){console.warn(e);} try{doCoach();}catch(e){console.warn(e);} try{renderExamCountdown();}catch(e){console.warn(e);} }
     if (id === 's-prog') try{rendProg();}catch(e){console.warn(e);}
     if (id === 's-sett') {
       try {
         var k = getAPIKey();
         var el2 = document.getElementById('api-key-status');
         if(el2) el2.textContent = k ? 'API key configurada' : 'Sin API key';
+      } catch(e){console.warn(e);}
+      try {
+        var edi = document.getElementById('exam-date-inp');
+        if (edi) edi.value = getExamDate();
+        var eds = document.getElementById('exam-date-status');
+        var nd = daysToExam();
+        if (eds) eds.textContent = nd===null ? 'Sin fecha configurada' :
+          nd<0 ? '⚠️ Esa fecha ya pasó — actualízala' :
+          nd===0 ? '¡El examen es HOY!' : 'Faltan ' + nd + ' día' + (nd===1?'':'s');
       } catch(e){console.warn(e);}
     }
   } catch(e) {

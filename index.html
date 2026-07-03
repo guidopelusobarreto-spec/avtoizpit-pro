@@ -260,6 +260,7 @@ window.onerror = function(msg, src, line, col, err) {
  </div>
  <div class="scr">
   <div class="coach"><div class="coach-ttl">&#x1F3AF; Coach Diario</div><div class="coach-msg" id="coach-msg">Calculando...</div><div class="coach-acts" id="coach-acts"></div></div>
+  <div id="exam-countdown" onclick="show('s-sett')" style="display:none;margin:10px 0;padding:10px 14px;border-radius:10px;background:var(--bg2);border:1px solid var(--bg4);font-size:15px;cursor:pointer"></div>
   <div class="predict-box" id="predict-box"></div>
   <div class="stats">
    <div class="stat"><div class="stat-n" id="s-seen">0</div><div class="stat-l">Vistas</div></div>
@@ -516,6 +517,16 @@ window.onerror = function(msg, src, line, col, err) {
 <div id="s-sett" class="screen">
  <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">⚙️ Ajustes</div></div>
  <div class="scr">
+  <!-- Fecha de examen -->
+  <div class="sett-row">
+   <div class="sett-lbl">🎯 Fecha de examen</div>
+   <div class="sett-sub">Los repasos se comprimen automáticamente para llegar con todo fresco ese día</div>
+   <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+    <input class="sett-inp" id="exam-date-inp" type="date" style="margin-top:0;flex:1">
+    <button class="sett-btn" style="margin-top:0" onclick="saveExamDate()">💾 Guardar</button>
+   </div>
+   <div style="font-size:12px;color:var(--fg2);margin-top:6px" id="exam-date-status"></div>
+  </div>
   <!-- Tema -->
   <div class="sett-row">
    <div class="sett-lbl">Tema visual</div>
