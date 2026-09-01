@@ -33,7 +33,7 @@ html,body{height:100%;background:var(--bg);color:var(--fg);font-family:-apple-sy
 .back{background:none;border:none;color:var(--acc);font-size:1.4rem;cursor:pointer;padding:2px 8px;line-height:1}
 .htitle{font-size:0.95rem;font-weight:700;flex:1;color:var(--fg)}
 .hsub{font-size:0.65rem;color:var(--fg2);margin-top:2px}
-.scr{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.scr{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 .hero{padding:16px 16px 8px;text-align:center}
 .hero-t{font-size:1.2rem;font-weight:900;color:var(--acc);letter-spacing:-.5px}
 .hero-s{font-size:0.65rem;color:var(--fg2);margin-top:2px}
@@ -78,7 +78,7 @@ html,body{height:100%;background:var(--bg);color:var(--fg);font-family:-apple-sy
 .qsc{flex:1;overflow-y:auto;padding:7px 16px 10px;-webkit-overflow-scrolling:touch}
 .qimg{width:100%;max-height:170px;object-fit:contain;border-radius:8px;background:var(--bg2);margin-bottom:8px;display:block}
 .aimg{width:100%;max-width:280px;max-height:140px;object-fit:contain;border-radius:8px;background:var(--bg2);display:block;margin-top:6px}
-.leyimg{width:100%;height:auto;border-radius:8px;background:var(--bg2);display:block;margin-top:6px;border:1px solid var(--bg4)}
+.leyimg{max-width:100%;width:auto;height:auto;max-height:240px;object-fit:contain;border-radius:8px;background:var(--bg2);display:block;margin:6px auto 0;border:1px solid var(--bg4)}
 .qvid{width:100%;border-radius:8px;overflow:hidden;background:#000;margin-bottom:8px}.qvid video{width:100%;max-height:190px;display:block}
 .qtxt{font-size:1.2rem;font-weight:600;line-height:1.5;margin-bottom:8px;color:var(--fg)}
 .audio-btn{background:none;border:none;font-size:1.1rem;cursor:pointer;padding:2px 4px;opacity:.7;flex-shrink:0}
@@ -105,7 +105,7 @@ html,body{height:100%;background:var(--bg);color:var(--fg);font-family:-apple-sy
 .exp-box.show{display:block}.exp-box.err{border-left-color:var(--red)}
 .exp-h{font-size:0.85rem;font-weight:700;margin-bottom:4px}
 .exp-h.ok{color:var(--green)}.exp-h.err{color:var(--red)}
-.exp-b{font-size:0.9rem;color:var(--fg2);line-height:1.55;white-space:pre-wrap}
+.exp-b{font-size:0.9rem;color:var(--fg2);line-height:1.55;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word}
 .tb{display:flex;gap:6px;padding:8px 16px;border-top:1px solid var(--bg3);flex-shrink:0;background:var(--bg)}
 .tb button{padding:12px 5px;border-radius:8px;border:none;cursor:pointer;font-size:0.7rem;font-weight:700}
 .btn-lang{background:var(--bg3);color:var(--fg2);flex:0 0 64px}
@@ -261,7 +261,7 @@ window.onerror = function(msg, src, line, col, err) {
 <div id="home" class="screen">
  <div class="hdr">
   <div style="flex:1"><div class="htitle">&#x1F697; &#x0410;&#x0432;&#x0442;&#x043E; &#x0418;&#x0437;&#x043F;&#x0438;&#x0442; PRO</div><div class="hsub" id="hero-sub">Cargando...</div></div>
-  <button onclick="show('s-sett')" style="background:none;border:none;font-size:1rem;cursor:pointer;color:#8b949e">&#x2699;&#xFE0F;</button>
+  <button onclick="openAjustes()" style="background:none;border:none;font-size:1rem;cursor:pointer;color:#8b949e">&#x2699;&#xFE0F;</button>
  </div>
  <div class="scr">
   <div class="coach"><div class="coach-ttl">&#x1F3AF; Coach Diario</div><div class="coach-msg" id="coach-msg">Calculando...</div><div class="coach-acts" id="coach-acts"></div></div>
@@ -523,8 +523,8 @@ window.onerror = function(msg, src, line, col, err) {
 <div id="s-leyes" class="screen">
  <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">⚖️ Leyes de prioridad</div></div>
  <div class="tb" style="border-bottom:1px solid var(--bg4);border-top:none">
-  <button id="ley-t1" class="btn-ok" onclick="verLeyes('leyes')">Reglas</button>
-  <button id="ley-t2" class="btn-lang" onclick="verLeyes('casos')">Casos</button>
+  <button id="ley-t1" class="btn-ok" style="flex:1" onclick="verLeyes('leyes')">Reglas</button>
+  <button id="ley-t2" class="btn-lang" style="flex:1" onclick="verLeyes('casos')">Casos</button>
  </div>
  <div class="scr" id="leyes-body"></div>
 </div>
@@ -546,6 +546,18 @@ window.onerror = function(msg, src, line, col, err) {
    <div class="sett-lbl">Tema visual</div>
    <div class="sett-sub">Claro u oscuro según tu preferencia</div>
    <button id="theme-btn" class="sett-btn" style="margin-top:8px" onclick="toggleTheme()">☀️ Claro</button>
+  </div>
+  <!-- App e instalacion -->
+  <div class="sett-row">
+   <div class="sett-lbl">📲 Instalar en el teléfono</div>
+   <div class="sett-sub">Guarda la app en el escritorio para abrirla sin navegador</div>
+   <button id="btn-instalar" class="sett-btn" style="margin-top:8px" onclick="installPWA()">Instalar en el teléfono</button>
+   <div class="sett-sub" style="margin-top:8px;margin-bottom:0">Si el botón aparece desactivado, usa el menú ⋮ del navegador y elige <b>Añadir a pantalla de inicio</b>.</div>
+  </div>
+  <div class="sett-row">
+   <div class="sett-lbl">🔓 Cerrar sesión</div>
+   <div class="sett-sub">Vuelve a la pantalla de contraseña. No borra tu progreso.</div>
+   <button class="sett-btn" style="margin-top:8px;background:var(--bg3);color:var(--fg)" onclick="cerrarSesion()">Cerrar sesión</button>
   </div>
   <!-- Tamano de letra -->
   <div class="sett-row">

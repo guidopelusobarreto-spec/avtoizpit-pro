@@ -79,15 +79,39 @@ function changePassword() {
 window.addEventListener('beforeinstallprompt', function(e) {
   e.preventDefault();
   _deferredInstall = e;
-  if (!localStorage.getItem('pwa_installed')) {
+  if (!localStorage.getItem('pwa_installed') && !sessionStorage.getItem('banner_oculto')) {
     document.getElementById('install-banner').classList.add('show');
   }
+  actualizarBotonInstalar();
 });
 window.addEventListener('appinstalled', function() {
   localStorage.setItem('pwa_installed', '1');
   document.getElementById('install-banner').classList.remove('show');
   toast('App instalada!');
 });
+function actualizarBotonInstalar() {
+  var b = document.getElementById('btn-instalar');
+  if (!b) return;
+  var yaInstalada = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+  if (yaInstalada) {
+    b.textContent = 'Ya esta instalada';
+    b.disabled = true; b.style.opacity = '.5';
+  } else if (_deferredInstall) {
+    b.textContent = 'Instalar en el telefono';
+    b.disabled = false; b.style.opacity = '1';
+  } else {
+    b.textContent = 'Usa el menu del navegador';
+    b.disabled = true; b.style.opacity = '.5';
+  }
+}
+function cerrarSesion() {
+  localStorage.removeItem('pw_session');
+  sessionStorage.removeItem('banner_oculto');
+  location.reload();
+}
+window.actualizarBotonInstalar = actualizarBotonInstalar;
+window.cerrarSesion = cerrarSesion;
+
 function installPWA() {
   if (_deferredInstall) {
     _deferredInstall.prompt();
@@ -101,7 +125,9 @@ function installPWA() {
 }
 function dismissBanner() {
   document.getElementById('install-banner').classList.remove('show');
-  localStorage.setItem('pwa_installed', '1');
+  // Solo oculta por esta sesion. Antes marcaba pwa_installed y la app
+  // creia para siempre que ya estaba instalada.
+  sessionStorage.setItem('banner_oculto', '1');
 }
 
 // ── SETTINGS ──────────────────────────────────
@@ -1270,13 +1296,17 @@ function _leyLimpio(s) {
 function leerLey(tipo, i) {
   var L = (tipo === 'casos' ? CASOS : LEYES)[i];
   if (!L) return;
-  var t = L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt + ' Clave: ' + L.cl;
+  var t = L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt +
+          (L.im ? ' ' + L.im.map(function(x){ return 'Pregunta ' + x.q + '. ' + x.a; }).join(' ') : '') +
+          ' Clave: ' + L.cl;
   if (window.speakES) window.speakES(_leyLimpio(t));
 }
 function leerTodo(tipo) {
   var arr = (tipo === 'casos' ? CASOS : LEYES);
   var t = arr.map(function(L) {
-    return L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt + ' Clave: ' + L.cl;
+    return L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt +
+           (L.im ? ' ' + L.im.map(function(x){ return 'Pregunta ' + x.q + '. ' + x.a; }).join(' ') : '') +
+           ' Clave: ' + L.cl;
   }).join(' Siguiente. ');
   if (window.speakES) window.speakES(_leyLimpio(t));
 }
@@ -1322,6 +1352,8 @@ function verLeyes(tipo) {
   }
 }
 function openLeyes() { show('s-leyes'); verLeyes(_leyVista); }
+function openAjustes() { show('s-sett'); actualizarBotonInstalar(); }
+window.openAjustes = openAjustes;
 window.openLeyes = openLeyes;
 window.verLeyes  = verLeyes;
 window.leerLey   = leerLey;
