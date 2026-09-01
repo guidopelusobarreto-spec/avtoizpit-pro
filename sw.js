@@ -23,6 +23,7 @@ var STATIC_FILES = [
   './agents.js',
   './app.js',
   './data-ranked.js',
+  './data-leyes.js',
   './data-traps.js',
   './data-pts3.js',
   './data-multi.js',

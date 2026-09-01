@@ -162,6 +162,40 @@ function setSpeed(s) {
   toast('Velocidad: ' + (s === 0.6 ? 'lenta' : s === 0.85 ? 'normal' : 'rapida'));
 }
 
+// ── Tamano de letra (presbicia) ───────────────
+var FS_VALS   = [1, 1.15, 1.3, 1.45];
+var FS_NOMBRES = ['Normal', 'Grande', 'Muy grande', 'Maximo'];
+function fsNombre(v) {
+  for (var i = 0; i < FS_VALS.length; i++) if (Math.abs(FS_VALS[i] - v) < 0.001) return FS_NOMBRES[i];
+  return 'Normal';
+}
+function applyFontScale(v) {
+  document.documentElement.style.setProperty('--fs', String(v));
+  for (var i = 0; i < FS_VALS.length; i++) {
+    var b = document.getElementById('fs-' + (i + 1));
+    if (!b) continue;
+    var on = Math.abs(FS_VALS[i] - v) < 0.001;
+    b.style.background = on ? 'var(--acc)' : 'var(--bg3)';
+    b.style.color      = on ? '#fff' : 'var(--fg)';
+  }
+  var st = document.getElementById('fs-status');
+  if (st) st.textContent = 'Actual: ' + fsNombre(v);
+}
+function setFontScale(v) {
+  v = parseFloat(v);
+  if (!isFinite(v) || v < 1 || v > 1.6) v = 1;
+  localStorage.setItem('font_scale', String(v));
+  applyFontScale(v);
+  toast('Letra: ' + fsNombre(v));
+}
+function loadFontScale() {
+  var v = parseFloat(localStorage.getItem('font_scale'));
+  if (!isFinite(v) || v < 1 || v > 1.6) v = 1;
+  applyFontScale(v);
+}
+window.setFontScale  = setFontScale;
+window.applyFontScale = applyFontScale;
+
 // ── TTS ───────────────────────────────────────
 var _ttsVoice = null;
 function initTTS() {
@@ -680,7 +714,7 @@ function confA() {
     // Modo seco: solo muestra "→ Respuesta guardada"
     ex.className='exp-box show';
     ex.innerHTML='<div class="exp-h ok">✏️ Respuesta registrada</div>'+
-      '<div class="exp-b" style="color:var(--fg3);font-size:13px">El resultado se revela al final del examen.</div>';
+      '<div class="exp-b" style="color:var(--fg3);font-size:0.65rem">El resultado se revela al final del examen.</div>';
   } else {
     ex.className='exp-box show'+(isOK?'':' err');
     ex.innerHTML='<div class="exp-h '+(isOK?'ok':'err')+'">'+(isOK?'✅ Correcto':'❌ Incorrecto')+'</div>'+
@@ -1226,6 +1260,73 @@ window.modoVelocidad = modoVelocidad;
 
 // ── TOGGLE AUTO-LEER ─────────────────────────────────────────────
 function toggleAutoRead() { TTS.toggleAutoRead(); }
+
+// ── Leyes de prioridad y casos de estudio ─────
+var _leyVista = 'leyes';
+function _leyLimpio(s) {
+  // el TTS espanol no sabe leer cirilico: чл. -> articulo
+  return String(s || '').replace(/\u0447\u043b\./g, 'art\u00edculo');
+}
+function leerLey(tipo, i) {
+  var L = (tipo === 'casos' ? CASOS : LEYES)[i];
+  if (!L) return;
+  var t = L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt + ' Clave: ' + L.cl;
+  if (window.speakES) window.speakES(_leyLimpio(t));
+}
+function leerTodo(tipo) {
+  var arr = (tipo === 'casos' ? CASOS : LEYES);
+  var t = arr.map(function(L) {
+    return L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt + ' Clave: ' + L.cl;
+  }).join(' Siguiente. ');
+  if (window.speakES) window.speakES(_leyLimpio(t));
+}
+function pararLey() { if (window.speechSynthesis) window.speechSynthesis.cancel(); }
+function verLeyes(tipo) {
+  _leyVista = tipo;
+  var arr = (tipo === 'casos' ? CASOS : LEYES);
+  var b1 = document.getElementById('ley-t1'), b2 = document.getElementById('ley-t2');
+  if (b1) b1.className = (tipo === 'leyes' ? 'btn-ok' : 'btn-lang');
+  if (b2) b2.className = (tipo === 'casos' ? 'btn-ok' : 'btn-lang');
+  var pend = [];
+  var html = '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+    '<button class="sett-btn" style="flex:1;margin-top:0" onclick="leerTodo(\'' + tipo + '\')">\u25b6\ufe0f Escuchar todo</button>' +
+    '<button class="sett-btn" style="flex:0 0 auto;margin-top:0;background:var(--bg3);color:var(--fg)" onclick="pararLey()">\u23f9\ufe0f</button></div>';
+  for (var i = 0; i < arr.length; i++) {
+    var L = arr[i];
+    html += '<div class="sett-row">' +
+      '<div style="display:flex;align-items:flex-start;gap:8px">' +
+      '<div style="flex:1"><div class="sett-lbl">' + L.t + '</div>' +
+      '<div class="sett-sub" style="margin-bottom:0">' +
+      (tipo === 'casos' ? 'Preguntas ' + L.p : L.art) + '</div></div>' +
+      '<button class="btn-speak-es" style="flex-shrink:0" onclick="leerLey(\'' + tipo + '\',' + i + ')">\ud83d\udd0a</button></div>' +
+      '<div class="exp-b" style="margin-top:8px">' + L.txt + '</div>' +
+      '<div class="exp-b" style="margin-top:8px;color:var(--acc2)"><b>Clave:</b> ' + L.cl + '</div>';
+    if (L.im) {
+      for (var j = 0; j < L.im.length; j++) {
+        var im = L.im[j];
+        pend.push({ el: 'leyimg-' + i + '-' + j, id: im.f });
+        html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bg4)">' +
+          '<div class="sett-sub" style="margin-bottom:4px">Pregunta ' + im.q + '</div>' +
+          '<img class="leyimg" id="leyimg-' + i + '-' + j + '" alt="">' +
+          '<div class="exp-b" style="margin-top:6px">' + im.a + '</div></div>';
+      }
+    }
+    html += '</div>';
+  }
+  html += '<div style="height:70px"></div>';
+  var body = document.getElementById('leyes-body');
+  if (body) body.innerHTML = html;
+  for (var k = 0; k < pend.length; k++) {
+    var el = document.getElementById(pend[k].el);
+    if (el && window.loadImg) loadImg(el, pend[k].id);
+  }
+}
+function openLeyes() { show('s-leyes'); verLeyes(_leyVista); }
+window.openLeyes = openLeyes;
+window.verLeyes  = verLeyes;
+window.leerLey   = leerLey;
+window.leerTodo  = leerTodo;
+window.pararLey  = pararLey;
 window.toggleAutoRead = toggleAutoRead;
 
 // ── BÚSQUEDA DE PREGUNTA ──────────────────────────────────────────
@@ -1903,6 +2004,7 @@ function sendT(){
 // ── INIT ──────────────────────────────────────
 function initApp(){
   applyTheme(localStorage.getItem('theme')||'dark');
+  loadFontScale();
   if (window.speechSynthesis) {
     window.speechSynthesis.getVoices();
     window.speechSynthesis.onvoiceschanged = function(){};
