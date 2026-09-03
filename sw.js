@@ -10,7 +10,7 @@
 //   - Imágenes/videos → Cache First con fallback offline
 // ═══════════════════════════════════════════════════════════════════
 
-var BUILD_ID = '2026-07-03T12-00';   // se regenera automáticamente en cada build
+var BUILD_ID = '2026-09-03T08-00';   // se regenera automáticamente en cada build
 var CACHE_STATIC = 'avtoizpit-static-' + BUILD_ID;
 var CACHE_IMG    = 'avtoizpit-img';   // las imágenes no cambian, no necesitan versión
 
@@ -27,7 +27,9 @@ var STATIC_FILES = [
   './data-traps.js',
   './data-pts3.js',
   './data-multi.js',
-  './data-mrest.js',
+  './data-mrest1.js',
+  './data-mrest2.js',
+  './data-mrest3.js',
   './data-vids.js',
   './data-glos.js',
   './data-vocab.js',

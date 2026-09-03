@@ -66,6 +66,19 @@ var _deferredInstall = null;
 
 // ── PASSWORD ──────────────────────────────────
 // checkPW handled by doPW in index.html
+function resetProgreso() {
+  var st = BRAIN.get();
+  var n  = Object.keys(st.seen || {}).length;
+  if (!confirm('\u26A0\uFE0F Borrar TODO el progreso de estudio?\n\n' +
+      n + ' preguntas respondidas, racha, simulacros y estadisticas.\n\n' +
+      'Se conservan: contrasena, tema, tamano de letra, fecha de examen y clave de API.')) return;
+  if (!confirm('Ultima confirmacion. Esto NO se puede deshacer.\n\nPulsa Aceptar para reiniciar.')) return;
+  BRAIN.resetProgress();
+  alert('\u2705 Progreso reiniciado. La app se recarga.');
+  location.reload();
+}
+window.resetProgreso = resetProgreso;
+
 function changePassword() {
   var np = document.getElementById('new-pw-inp').value.trim();
   if (!np || np.length < 4) { toast('Minimo 4 caracteres'); return; }
@@ -253,7 +266,7 @@ function buildAll() {
   // Inicializar frecuencias reales en BRAIN
   BRAIN.initFreq(ALL);
   document.getElementById('hero-sub').textContent =
-    ALL.length + ' preg \u2022 6 agentes \u2022 Simulacro Real \u2022 TTS bulgaro';
+    ALL.length + ' preg \u2022 4 agentes \u2022 Simulacro Real \u2022 TTS bulgaro';
 }
 
 // ── UI ────────────────────────────────────────
@@ -300,8 +313,7 @@ function uhome() {
     var m = BRAIN.getMetrics();
     var el;
     el = document.getElementById('s-seen'); if(el) el.textContent = m.seen;
-    var dom = Object.values(BRAIN.get().seen||{}).filter(function(r){return r.c>=3&&r.w===0;}).length;
-    el = document.getElementById('s-dom'); if(el) el.textContent = dom;
+    el = document.getElementById('s-dom'); if(el) el.textContent = m.dominated;
     el = document.getElementById('s-str'); if(el) el.textContent = m.streak||0;
     el = document.getElementById('gpct'); if(el) el.textContent = m.pct+'%';
     el = document.getElementById('gbar'); if(el) el.style.width = m.pct+'%';
@@ -368,12 +380,24 @@ function startSet(i) {
 // ── MODOS ─────────────────────────────────────
 function mod(m) {
   var qs, title, sub, explain=true, exam=false, timed=false, timeLimit=0, dryRun=false;
+  if (m === 'prueba') {
+    qs = AGENTS.buildPrueba(ALL, BRAIN.semanaDeEstudio());
+    title = 'Prueba patrón · semana ' + BRAIN.semanaDeEstudio();
+    sub = '45 preg • 97 pts • misma estructura cada semana';
+    explain = false; exam = true; timed = true; timeLimit = 2400; dryRun = true;
+  } else
+  if (m === 'confus') {
+    title='Confusiones'; sub='las que fallas siempre igual'; explain=true;
+    var _ids={}; BRAIN.getConfusiones(2).forEach(function(x){_ids[x.id]=1;});
+    qs = BRAIN.shA(BRAIN.interleave(Object.keys(_ids).map(function(id){return ALL_MAP[id];}).filter(Boolean)));
+    if(!qs.length){ toast('Todavía no hay confusiones repetidas'); return; }
+  } else
   if (m === 'srs') {
     qs = AGENTS.getSRSQueue(ALL);
     if (!qs.length) { toast('Sin preguntas pendientes hoy!'); return; }
     title = 'Plan SRS'; sub = qs.length + ' preg SRS inteligente';
   } else if (m === 'adaptive') {
-    qs = AGENTS.buildAdaptive(ALL, VIDS);
+    qs = BRAIN.interleave(AGENTS.buildAdaptive(ALL, VIDS));
     title = 'Examen Adaptativo'; sub = '4 agentes coordinados'; explain=false; exam=true;
   } else if (m === 'exam') {
     qs = AGENTS.buildExamFrom(ALL, VIDS);
@@ -383,13 +407,13 @@ function mod(m) {
     qs = BRAIN.shA(AGENTS.buildAdaptive(ALL,VIDS).slice(0,10));
     title = 'Prueba Rapida'; sub = '10 preg \u2022 5 min'; timed=true; timeLimit=300;
   } else if (m === 'pts3') {
-    qs = BRAIN.shA(BRAIN.shuffle([].concat(PTS3)).slice(0,45));
+    qs = BRAIN.shA(BRAIN.interleave(BRAIN.shuffle([].concat(PTS3)).slice(0,45)));
     title = '3 Puntos'; sub = '508 preg de maximo valor';
   } else if (m === 'traps') {
-    qs = BRAIN.shA(BRAIN.shuffle([].concat(TRAPS)).slice(0,30));
+    qs = BRAIN.shA(BRAIN.interleave(BRAIN.shuffle([].concat(TRAPS)).slice(0,30)));
     title = 'Trampas'; sub = 'Respuestas casi identicas';
   } else if (m === 'multi') {
-    qs = BRAIN.shA(BRAIN.shuffle([].concat(MULTI)).slice(0,30));
+    qs = BRAIN.shA(BRAIN.interleave(BRAIN.shuffle([].concat(MULTI)).slice(0,30)));
     title = 'Multirespuesta'; sub = '259 preg con varias correctas';
   } else if (m === 'video') {
     if (!VIDS.length) { toast('Sin preguntas de video'); return; }
@@ -479,7 +503,7 @@ function mod(m) {
     var failedIds = Object.entries(BRAIN.get().err||{})
       .sort(function(a,b){return b[1]-a[1];})
       .slice(0,15).map(function(e){return +e[0];});
-    qs = AGENTS.buildCorrectiveFeedback(ALL, failedIds);
+    qs = BRAIN.interleave(AGENTS.buildCorrectiveFeedback(ALL, failedIds));
     if (!qs.length) { toast('¡Sin errores! Haz un simulacro primero.'); return; }
     title = '🎯 Mis Errores'; sub = qs.length+' preguntas más falladas • enfoque máximo';
     explain=true; exam=false; timed=false;
@@ -680,6 +704,63 @@ function renderQ() {
   }
 }
 
+// ── Meta de tiempo decreciente por pregunta ──────────────────────
+function _metaSeg(id) {
+  try {
+    if (BRAIN.isDominated(id)) return 10;
+    var r = BRAIN.get().seen[id];
+    if (r && (r.streak||0) >= 2) return 15;
+  } catch(e) {}
+  return 25;
+}
+window._metaSeg = _metaSeg;
+
+// ── Pausa de recuperacion ────────────────────────────────────────
+var _RECUP = {t:null, html:'', n:0};
+function _pausaRecup() {
+  return localStorage.getItem('recup_off') !== '1';
+}
+function _verYa() {
+  clearInterval(_RECUP.t); _RECUP.t = null;
+  var ex = document.getElementById('expbox');
+  if (ex && _RECUP.html) ex.innerHTML = _RECUP.html;
+}
+window._verYa = _verYa;
+function togglePausaRecup() {
+  var off = localStorage.getItem('recup_off') === '1';
+  localStorage.setItem('recup_off', off ? '0' : '1');
+  var b = document.getElementById('recup-btn');
+  if (b) b.textContent = off ? 'Activada (3s)' : 'Desactivada';
+}
+window.togglePausaRecup = togglePausaRecup;
+
+// ── Modo Confusiones ─────────────────────────────────────────────
+function openConfusiones() {
+  var lista = BRAIN.getConfusiones(2);
+  var c = document.getElementById('conf-list');
+  if (!c) { show('home'); return; }
+  if (!lista.length) {
+    c.innerHTML = '<div class="sett-row"><div class="sett-sub">Todavía no hay confusiones repetidas. ' +
+      'Aparecen aquí cuando eliges DOS veces la misma respuesta equivocada en una pregunta. ' +
+      'Son las que más puntos te quitan, porque no fallas al azar: entiendes algo al revés.</div></div>';
+    show('s-confus'); return;
+  }
+  var html = '<div class="sett-row"><div class="sett-sub">' + lista.length +
+    ' confusiones repetidas. No son despistes: en cada una eliges siempre la misma opción equivocada.</div>' +
+    '<button class="sett-btn" style="margin-top:8px" onclick="mod(\'confus\')">🎯 Practicar solo estas</button></div>';
+  lista.slice(0, 40).forEach(function(x) {
+    var q = ALL_MAP[x.id];
+    html += '<div class="sett-row">' +
+      '<div class="sett-lbl" style="font-size:0.7rem">' + esc((q && (q.es||q.bg) || ('#'+x.id)).substring(0,110)) + '</div>' +
+      '<div class="exp-b" style="color:#ef4444;margin-top:6px">✗ Tú eliges (' + x.veces + ' veces): ' + esc(x.elegida) + '</div>' +
+      '<div class="exp-b" style="color:#22c55e">✓ Correcta: ' + esc(x.correcta) + '</div>' +
+      '</div>';
+  });
+  c.innerHTML = html;
+  show('s-confus');
+}
+window.openConfusiones = openConfusiones;
+
 function setConf(c) {
   S.confidence=c;
   document.getElementById('cb-s').className='conf-btn'+(c==='sure'?' c-s':'');
@@ -732,8 +813,28 @@ function confA() {
   else {
     S.ko++;
     S.failedIds = (S.failedIds||[]).concat(q.id);
+    // reencolar para relearning (una sola vez por pregunta y sesion)
+    S._vistas = S._vistas || {};
+    if (!S.exam && !S._vistas[q.id]) {
+      S._vistas[q.id] = 1;
+      S._reponer = (S._reponer||[]).concat(q);
+    }
   }
   BRAIN.recordAnswer(q.id,isOK,S.confidence,timeSpent);
+
+  // Guardar QUE opcion elegiste mal, no solo que fallaste
+  var _avisoConf = '';
+  if (!isOK) {
+    var _eleg = S.sel.map(function(i){ var a=(q.a||[])[i]; return a?(a.es||a.t||''):''; }).filter(Boolean);
+    var _corr = cis.map(function(i){ var a=(q.a||[])[i]; return a?(a.es||a.t||''):''; }).filter(Boolean);
+    var _repes = Math.max.apply(null, _eleg.map(function(x){ return BRAIN.vecesElegidaMal(q.id,x); }).concat([0]));
+    BRAIN.recordWrongChoice(q.id, _eleg, _corr);
+    if (_repes >= 1) {
+      _avisoConf = '<div class="exp-b" style="color:#f97316;font-weight:700;margin-bottom:6px">' +
+        '\u26A0\uFE0F Es la ' + (_repes+1) + '\u00AA vez que eliges esta misma opci\u00F3n. ' +
+        'No es despiste: hay algo que est\u00E1s entendiendo al rev\u00E9s.</div>';
+    }
+  }
 
   var ex=document.getElementById('expbox');
   if (S.dryRun) {
@@ -743,9 +844,30 @@ function confA() {
       '<div class="exp-b" style="color:var(--fg3);font-size:0.65rem">El resultado se revela al final del examen.</div>';
   } else {
     ex.className='exp-box show'+(isOK?'':' err');
-    ex.innerHTML='<div class="exp-h '+(isOK?'ok':'err')+'">'+(isOK?'✅ Correcto':'❌ Incorrecto')+'</div>'+
+    var _cuerpo = '<div class="exp-h '+(isOK?'ok':'err')+'">'+(isOK?'✅ Correcto':'❌ Incorrecto')+'</div>'+
+      _avisoConf +
       '<div class="exp-b">'+(q.explain||(isOK?'Bien hecho!':'Repasa esta pregunta.'))+'</div>'+
       (q.explain?'<button class="btn-speak-es" onclick="speakES(\''+esc(q.explain||'')+'\')">🔊 Escuchar</button>':'');
+    // PAUSA DE RECUPERACION: 3s para que intentes explicartelo tu antes de leerlo.
+    // Recordar por que se falla consolida mucho mas que leer la respuesta.
+    // Se salta en examenes y con el modo velocidad; se desactiva en Ajustes.
+    if (_pausaRecup() && !S.exam && q.explain) {
+      ex.innerHTML = '<div class="exp-h '+(isOK?'ok':'err')+'">'+(isOK?'✅ Correcto':'❌ Incorrecto')+'</div>'+
+        _avisoConf +
+        '<div class="exp-b" id="recup-msg" style="color:var(--acc2)">🤔 Antes de leer: ¿por qué es así? '+
+        'Dilo mentalmente. <b id="recup-n">3</b></div>'+
+        '<button class="btn-speak-es" onclick="_verYa()">Ver ya</button>';
+      _RECUP.html = _cuerpo; _RECUP.n = 3;
+      clearInterval(_RECUP.t);
+      _RECUP.t = setInterval(function(){
+        _RECUP.n--;
+        var n = document.getElementById('recup-n');
+        if (_RECUP.n <= 0) { _verYa(); return; }
+        if (n) n.textContent = _RECUP.n;
+      }, 1000);
+    } else {
+      ex.innerHTML = _cuerpo;
+    }
   }
 
   EXAM_LOG.push({q:q,sel:S.sel.slice(),cis:cis,ok:isOK,time:timeSpent});
@@ -754,9 +876,13 @@ function confA() {
   // ── FEEDBACK DE VELOCIDAD individual ─────────────────────────────
   var speedEl = document.getElementById('q-speed');
   if (speedEl && timeSpent > 0) {
-    var color = timeSpent<=20?'#22c55e':timeSpent<=35?'#eab308':'#ef4444';
-    var icon  = timeSpent<=20?'⚡':timeSpent<=35?'✓':'🐢';
-    speedEl.innerHTML = '<span style="color:'+color+';font-size:11px">'+icon+' '+timeSpent+'s</span>';
+    // La meta baja a medida que dominas la pregunta: 25s la primera vez,
+    // 15s cuando ya llevas racha y 10s si esta dominada. Asi entrenas
+    // los <20 min del examen, no solo el acierto.
+    var meta  = _metaSeg(q.id);
+    var color = timeSpent<=meta?'#22c55e':timeSpent<=meta*1.6?'#eab308':'#ef4444';
+    var icon  = timeSpent<=meta?'⚡':timeSpent<=meta*1.6?'✓':'🐢';
+    speedEl.innerHTML = '<span style="color:'+color+';font-size:11px">'+icon+' '+timeSpent+'s / meta '+meta+'s</span>';
   }
 
   document.getElementById('btn-ok').style.display='none';
@@ -765,6 +891,17 @@ function confA() {
 }
 
 function nextQ() {
+  // RELEARNING EN LA MISMA SESION: una pregunta fallada vuelve a aparecer
+  // unas cuantas despues, y no se da por cerrada hasta que la aciertas una
+  // vez hoy. Fallar y seguir adelante no ensena nada; fallar, dejar hueco
+  // y volver a intentarlo es lo que la fija.
+  if (S._reponer && S._reponer.length && !S.exam) {
+    var _pos = S.idx + 5;
+    while (S._reponer.length && _pos <= S.qs.length) {
+      S.qs.splice(Math.min(_pos, S.qs.length), 0, S._reponer.shift());
+      _pos += 6;
+    }
+  }
   S.idx++;
   if(S.idx>=S.qs.length){endS();return;}
   renderQ();
@@ -776,6 +913,21 @@ function endS() {
   var el=Math.round((Date.now()-S.t0)/1000);
   var mm=Math.floor(el/60),ss=el%60;
   BRAIN.recordSession(S.mode,S.idx,el);
+  // marcar el bloque del plan de hoy como hecho
+  try {
+    var _mapa = {srs:'srs', confus:'confus', errors:'errores', quick:'velocidad', prueba:'prueba'};
+    var _b = _mapa[S.mode] || (String(S.mode).indexOf('fase')===0 ? 'nuevas' : null);
+    if (_b) BRAIN.marcarBloque(_b);
+  } catch(e) {}
+  // la prueba patron se guarda como medida semanal
+  if (S.mode === 'prueba') {
+    try {
+      BRAIN.recordCheckpoint({
+        forma: BRAIN.semanaDeEstudio(), pts: S.score, max: 97, seg: el,
+        estimado: (BRAIN.getSkillEstimate(ALL)||{}).pts
+      });
+    } catch(e) {}
+  }
 
   if(S.exam||S.mode==='set'||S.mode==='examdry'||S.mode==='realexam'){
     var examData={date:new Date().toLocaleDateString('es'),score:S.score,max:S.maxS,
@@ -1017,7 +1169,7 @@ var _glosAll=[];
 function openGlos(){
   _glosAll=[];
   if(typeof VOCAB_DATA!=='undefined')VOCAB_DATA.forEach(function(v){_glosAll.push({bg:v.bg,bg2:'',es:v.es,explain:v.explain});});
-  if(typeof GLOS!=='undefined')GLOS.forEach(function(g){_glosAll.push({bg:g[0],bg2:g[1],es:g[2],explain:''});});
+  if(typeof GLOS!=='undefined')GLOS.forEach(function(g){_glosAll.push({bg:g[0],bg2:g[1],es:g[2],explain:g[3]||''});});
   _glosAll.sort(function(a,b){return a.bg.localeCompare(b.bg);});
   rendG(_glosAll);document.getElementById('gi').value='';show('s-glos');
 }
@@ -1170,67 +1322,85 @@ window.stopPodcast = function(){
 function openMisionDia() {
   var panel = document.getElementById('mision-panel');
   if (!panel) { show('home'); return; }
-  var m = BRAIN.getMetrics();
-  var s = BRAIN.get();
-  var fase = typeof AGENTS!=='undefined' ? AGENTS.IDS_FASE1 : [];
+  var plan = AGENTS.planDia(ALL, VIDS);
+  var est  = BRAIN.getSkillEstimate(ALL) || {pts:0,pct:0,base:0,muestraBase:0};
+  var cps  = BRAIN.getCheckpoints();
+  var hoy  = new Date().toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
 
-  // Calcular misión de hoy
-  var f1done = fase.filter(function(id){var r=s.seen[id];return r&&r.c>=3&&r.w===0;}).length;
-  var due = m.due;
-  var hoy = new Date().toDateString();
-  var pregHoy = (s.cal||{})[hoy]||0;
-
-  var mision = [];
-
-  if (due > 0) {
-    mision.push({
-      emoji:'📅', titulo:'SRS Pendiente', pts:due+' repasos',
-      desc:'Repasar ahora consolida 3× más que mañana',
-      fn:"mod('srs')", urgente:true
-    });
-  }
-  if (f1done < 8) {
-    mision.push({
-      emoji:'🎯', titulo:'F1: Casi-Seguras', pts: f1done+'/8 dominadas',
-      desc:'Cada una = 2pts garantizados en el examen',
-      fn:"mod('fase1')", urgente:f1done===0
-    });
-  }
-  mision.push({
-    emoji:'📋', titulo:'Simulacro Seco', pts:'45 preg cronometrado',
-    desc:'Meta: terminar en <20 min con >87pts',
-    fn:"mod('examdry')", urgente:false
-  });
-  if (m.p3pct < 80) {
-    mision.push({
-      emoji:'💎', titulo:'F3: Tres Puntos', pts:m.p3pct+'% dominadas',
-      desc:'Son el 47% de los puntos del examen',
-      fn:"mod('fase3')", urgente:false
-    });
+  // ── cabecera: donde estas hoy
+  var delta = '';
+  if (cps.length >= 2) {
+    var d = cps[cps.length-1].pts - cps[cps.length-2].pts;
+    delta = '<span style="color:'+(d>=0?'#22c55e':'#ef4444')+';font-weight:700"> '+
+      (d>=0?'+':'')+d+' pts vs semana anterior</span>';
+  } else if (cps.length === 1) {
+    delta = '<span style="color:var(--fg3)"> · primera medición hecha</span>';
   }
 
-  // Tiempo estimado
-  var minTotales = due*2 + (f1done<8?5:0) + 25 + 15;
+  var h = '<div style="padding:16px">';
+  h += '<div style="font-size:13px;color:var(--fg3)">'+hoy+' · semana '+plan.semana+
+       (plan.dias!==null?' · faltan '+plan.dias+' días':'')+'</div>';
+  h += '<div style="font-size:20px;font-weight:800;color:var(--fg);margin:4px 0 10px">'+
+       (plan.cerrado?'✅ Día cerrado':'Tu clase de hoy')+'</div>';
 
-  panel.innerHTML =
-    '<div style="padding:16px">'+
-    '<div style="font-size:13px;color:var(--fg3);margin-bottom:4px">'+new Date().toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'})+'</div>'+
-    '<div style="font-size:20px;font-weight:800;color:var(--fg);margin-bottom:4px">Tu misión de hoy</div>'+
-    '<div style="font-size:13px;color:var(--fg3);margin-bottom:16px">⏱ ~'+minTotales+' min • '+pregHoy+' preg ya hoy</div>'+
-    mision.map(function(t,i){
-      return '<button onclick="'+t.fn+'" style="display:flex;gap:12px;width:100%;'+
-        'background:'+(t.urgente?'rgba(249,115,22,.1)':'var(--bg2)')+';'+
-        'border:1px solid '+(t.urgente?'var(--acc)':'var(--bg4)')+';border-radius:10px;'+
-        'padding:12px 14px;margin-bottom:8px;cursor:pointer;text-align:left;align-items:center">'+
-        '<div style="font-size:24px">'+t.emoji+'</div>'+
-        '<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--fg)">'+t.titulo+'</div>'+
-        '<div style="font-size:12px;color:var(--acc);font-weight:600">'+t.pts+'</div>'+
-        '<div style="font-size:11px;color:var(--fg3)">'+t.desc+'</div></div>'+
-        '<div style="font-size:12px;color:var(--fg3)">'+(i===0&&t.urgente?'🔴':'▶')+'</div>'+
-        '</button>';
-    }).join('')+
+  // ── medidor de nivel
+  h += '<div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;padding:12px 14px;margin-bottom:14px">'+
+    '<div style="font-size:12px;color:var(--fg3)">Nivel estimado si te examinaras hoy</div>'+
+    '<div style="font-size:26px;font-weight:800;color:var(--acc)">'+est.pts+' <span style="font-size:14px;color:var(--fg3)">/ 97 pts</span></div>'+
+    '<div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;margin:8px 0">'+
+      '<div style="height:100%;width:'+Math.min(100,est.pct)+'%;background:var(--acc)"></div></div>'+
+    '<div style="font-size:11px;color:var(--fg3)">Aprobado en 87. '+
+      (est.muestraBase>=30
+        ? 'Calculado con tu acierto real a la primera ('+est.base+'% en '+est.muestraBase+' preguntas).'
+        : 'Aún estimado al 50% en lo no visto: hacen falta 30 preguntas nuevas para afinarlo ('+est.muestraBase+'/30).')+
+    '</div>'+ (delta?'<div style="font-size:12px;margin-top:6px">'+delta+'</div>':'') +
     '</div>';
 
+  // ── barra de avance del dia
+  h += '<div style="font-size:12px;color:var(--fg3);margin-bottom:8px">'+
+       plan.hechos+' de '+plan.total+' bloques · '+
+       (plan.cerrado?'nada pendiente':'~'+plan.minutos+' min restantes')+'</div>';
+
+  // ── bloques
+  plan.bloques.forEach(function(b){
+    var op = b.hecho ? 'opacity:.45;' : '';
+    h += '<button onclick="'+(b.hecho?'':b.fn)+'" style="display:block;width:100%;text-align:left;'+op+
+      'background:var(--bg2);border:1px solid '+(b.hecho?'var(--bg4)':'var(--acc)')+';'+
+      'border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">'+
+      '<div style="display:flex;gap:10px;align-items:center">'+
+        '<div style="font-size:22px">'+(b.hecho?'✅':b.emoji)+'</div>'+
+        '<div style="flex:1">'+
+          '<div style="font-size:14px;font-weight:700;color:var(--fg)">'+b.t+'</div>'+
+          '<div style="font-size:12px;color:var(--acc);font-weight:600">'+b.detalle+' · ~'+b.min+' min</div>'+
+        '</div></div>'+
+      '<div style="font-size:11px;color:var(--fg3);margin-top:6px;line-height:1.5">'+b.porque+'</div>'+
+      '</button>';
+  });
+
+  if (plan.cerrado) {
+    h += '<div style="background:rgba(34,197,94,.1);border:1px solid #22c55e;border-radius:10px;'+
+      'padding:12px 14px;margin-top:6px;font-size:12px;color:var(--fg2);line-height:1.6">'+
+      'Has hecho todo lo de hoy. Seguir estudiando ahora rinde poco: el material '+
+      'necesita una noche para consolidarse. Vuelve mañana.</div>';
+  }
+
+  // ── historial de mediciones
+  if (cps.length) {
+    h += '<div style="margin-top:18px;font-size:13px;font-weight:700;color:var(--fg)">Mediciones semanales</div>'+
+         '<div style="font-size:11px;color:var(--fg3);margin-bottom:8px">Misma estructura cada semana '+
+         '(12 de 1pt + 14 de 2pt + 19 de 3pt) con preguntas distintas, para que las notas sean comparables.</div>';
+    cps.slice(-8).forEach(function(c){
+      var mm = Math.floor((c.seg||0)/60), ss = (c.seg||0)%60;
+      h += '<div style="display:flex;justify-content:space-between;background:var(--bg2);'+
+        'border-radius:8px;padding:9px 12px;margin-bottom:6px;font-size:12px">'+
+        '<span style="color:var(--fg3)">Semana '+c.semana+'</span>'+
+        '<span style="color:'+(c.pts>=87?'#22c55e':c.pts>=70?'#eab308':'#ef4444')+';font-weight:700">'+
+          c.pts+'/97 · '+mm+'m'+(ss<10?'0':'')+ss+'s</span></div>';
+    });
+  }
+
+  h += '</div>';
+  panel.innerHTML = h;
   show('s-mision');
 }
 window.openMisionDia = openMisionDia;

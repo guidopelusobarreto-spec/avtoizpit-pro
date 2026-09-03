@@ -73,7 +73,7 @@ var AGENTS = (function() {
 
     } else if (fase === 1) {
       // Estudiando F1
-      var f1done = IDS_FASE1.filter(function(id){ var r=s.seen[id]; return r&&r.c>=3&&r.w===0; }).length;
+      var f1done = BRAIN.countDominated(IDS_FASE1);
       if(f1done < IDS_FASE1.length) {
         msg='🎯 Fase 1 en progreso: '+f1done+'/8 casi-seguras dominadas. '+
           'Cada una que dominas vale 2pt garantizados en el examen. Quedan '+(IDS_FASE1.length-f1done)+'.';
@@ -127,9 +127,7 @@ var AGENTS = (function() {
   // ─── Detectar fase actual ─────────────────────────────────────────
   function _detectarFaseActual(s) {
     // F1: ¿tiene las 8 casi-seguras dominadas?
-    var f1done = IDS_FASE1.filter(function(id){
-      var r=(s.seen||{})[id]; return r&&r.c>=3&&r.w===0;
-    }).length;
+    var f1done = BRAIN.countDominated(IDS_FASE1);
     if(f1done < IDS_FASE1.length) return 1;
 
     // F2: ¿tiene los videos críticos dominados?
@@ -145,16 +143,12 @@ var AGENTS = (function() {
 
   function _countVideoDominados(s) {
     if(typeof VIDS === 'undefined') return 0;
-    return (VIDS||[]).filter(function(q){
-      var r=(s.seen||{})[q.id]; return r&&r.c>=3&&r.w===0;
-    }).length;
+    return BRAIN.countDominated((VIDS||[]).map(function(q){return q.id;}));
   }
 
   function _countPts3Dominados(s) {
     if(typeof PTS3 === 'undefined') return 0;
-    return (PTS3||[]).filter(function(q){
-      var r=(s.seen||{})[q.id]; return r&&r.c>=2&&r.w===0;
-    }).length;
+    return BRAIN.countDominated((PTS3||[]).map(function(q){return q.id;}));
   }
 
   var TIPS = [
@@ -162,37 +156,160 @@ var AGENTS = (function() {
     'Para terminar en 20 min: no leas respuestas que ya sabes. Reconocimiento instantáneo = velocidad.',
     'Los videos siempre son 2 en el examen. Si los dominas, son 6pts rápidos y seguros.',
     'Técnica de velocidad: en el examen real, responde primero las que sabes al 100%. Deja las dudosas para el final.',
-    'Los 8 IDs casi-seguros salen en 1 de cada 4 exámenes. Falarlos es perder 16pts de golpe.',
+    'Los 8 IDs casi-seguros salen en 1 de cada 4 exámenes. Fallarlos es perder 16pts de golpe.',
     'R4 (Normas) tiene 22 preguntas por test — el bloque más grande. 1 hora en R4 = +22pts potenciales.',
-    'Examen seco cronometrado 2x por semana: el único way de entrenar la velocidad real.',
+    'Examen seco cronometrado 2x por semana: la única forma de entrenar la velocidad real.',
     'Las multirespuesta: selecciona la 1ª, PAUSA, busca la 2ª antes de confirmar.',
   ];
   function _getTip() { return TIPS[new Date().getDay()%TIPS.length]; }
 
   // ─── AGENTE 2: SRS con pesos reales ──────────────────────────────
   function getSRSQueue(all) {
+    // Delegamos en BRAIN: alli esta la puntuacion completa (errores, confianza,
+    // vocabulario, lentitud, atraso) combinada con fase y valor estrategico.
+    return BRAIN.getSRSQueue(all, 25);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // EL PROFESOR — plan diario cerrable y medicion semanal
+  // ═══════════════════════════════════════════════════════════════
+  // Cada bloque responde a un principio concreto de aprendizaje, no a un
+  // capricho de orden: recuperacion espaciada primero (lo vencido pierde
+  // valor cada dia), correccion de errores sistematicos despues (mientras
+  // hay atencion fresca), material nuevo en el medio, y cierre con practica
+  // cronometrada para entrenar la velocidad, que es un objetivo aparte.
+
+  function _diasHastaExamen() {
+    try {
+      var ed = localStorage.getItem('exam_date');
+      if (!ed) return null;
+      var ex = new Date(ed + 'T00:00:00'), hoy = new Date(); hoy.setHours(0,0,0,0);
+      return Math.round((ex - hoy) / 86400000);
+    } catch(e) { return null; }
+  }
+
+  // Cuantas preguntas NUEVAS toca hoy para llegar al examen sin atracones
+  function _cargaNuevas(all) {
     var s = BRAIN.get();
-    var now = new Date();
+    var pendientes = all.filter(function(q){ return !s.seen[q.id]; }).length;
+    var dias = _diasHastaExamen();
+    if (pendientes === 0) return 0;
+    if (dias === null || dias <= 0) return 20;              // sin fecha: ritmo comodo
+    var necesarias = Math.ceil(pendientes / Math.max(1, dias));
+    return Math.max(10, Math.min(45, necesarias));
+  }
 
-    // Prioridad: fase1 > fase2 > fase3 > fase4, dentro de cada fase por due date
-    var due = all.filter(function(q){
-      var r=s.seen[q.id]; return r && new Date(r.due)<=now;
-    }).sort(function(a,b){
-      var fa=a.fase||4, fb=b.fase||4;
-      if(fa!==fb) return fa-fb; // fase más baja = más urgente
-      // Dentro de la misma fase: por valor estratégico
-      var va=a.val||0, vb=b.val||0;
-      return vb-va;
+  function planDia(all, vids) {
+    var s = BRAIN.get();
+    var m = BRAIN.getMetrics();
+    var hechos = BRAIN.bloquesHechos();
+    var fase = _detectarFaseActual(s);
+    var nuevas = _cargaNuevas(all);
+    var dias = _diasHastaExamen();
+    var confus = BRAIN.getConfusiones(2).length;
+    var hoy = new Date().toDateString();
+    var falladasHoy = Object.keys(s.err || {}).filter(function(id){
+      var r = s.seen[id]; return r && r.last === hoy && (r.streak||0) === 0;
+    }).length;
+
+    var b = [];
+
+    if (m.due > 0) {
+      b.push({ id:'srs', emoji:'🔁', t:'Repaso vencido',
+        detalle: m.due + ' preguntas tocan hoy',
+        porque:'Lo vencido es lo que estas a punto de olvidar. Repasarlo hoy vale mucho mas que manana.',
+        min: Math.max(2, Math.round(m.due * 0.4)), fn:"mod('srs')" });
+    }
+
+    if (confus > 0) {
+      b.push({ id:'confus', emoji:'🔀', t:'Corregir confusiones',
+        detalle: confus + ' donde fallas siempre igual',
+        porque:'No son despistes: eliges siempre la misma opcion equivocada. Hasta que no rompas el patron seguiran costandote puntos.',
+        min: Math.max(3, Math.round(confus * 0.5)), fn:"mod('confus')" });
+    }
+
+    if (nuevas > 0) {
+      var nomFase = FASE_INFO[fase];
+      b.push({ id:'nuevas', emoji: nomFase.emoji, t:'Material nuevo — ' + nomFase.n,
+        detalle: nuevas + ' preguntas que aun no has visto',
+        porque: dias !== null
+          ? 'A este ritmo cubres todo el banco antes del examen (' + dias + ' dias). Menos hoy significa mas manana.'
+          : nomFase.desc,
+        min: Math.round(nuevas * 0.6), fn: "mod('fase" + fase + "')" });
+    }
+
+    if (falladasHoy > 0) {
+      b.push({ id:'errores', emoji:'🎯', t:'Cerrar los fallos de hoy',
+        detalle: falladasHoy + ' falladas sin recuperar',
+        porque:'Una pregunta fallada y no vuelta a acertar el mismo dia se pierde. Volver a acertarla hoy es lo que la fija.',
+        min:4, fn:"mod('errors')" });
+    }
+
+    b.push({ id:'velocidad', emoji:'⚡', t:'Cierre cronometrado',
+      detalle:'10 preguntas contrarreloj',
+      porque:'Acertar y acertar RAPIDO son dos habilidades distintas. Los <20 min se entrenan aparte.',
+      min:5, fn:"mod('quick')" });
+
+    var toca = BRAIN.tocaCheckpoint();
+    if (toca) {
+      b.push({ id:'prueba', emoji:'📏', t:'Prueba patron semanal',
+        detalle:'45 preguntas • 97 puntos • forma nueva',
+        porque:'Misma estructura que el examen real y mismo reparto de puntos cada semana, para que la nota de una semana se pueda comparar con la de otra.',
+        min:25, fn:"mod('prueba')" });
+    }
+
+    b.forEach(function(x){ x.hecho = !!hechos[x.id]; });
+    var hechosN = b.filter(function(x){ return x.hecho; }).length;
+
+    return {
+      bloques: b,
+      hechos: hechosN,
+      total: b.length,
+      cerrado: hechosN >= b.length,
+      minutos: b.reduce(function(a,x){ return a + (x.hecho ? 0 : x.min); }, 0),
+      minutosTotal: b.reduce(function(a,x){ return a + x.min; }, 0),
+      fase: fase,
+      dias: dias,
+      semana: BRAIN.semanaDeEstudio(),
+      tocaPrueba: toca
+    };
+  }
+
+  // ─── Prueba patron: formas paralelas ──────────────────────────────
+  // Para poder comparar semana con semana hace falta un instrumento estable.
+  // Repetir el MISMO test lo invalida (te lo aprendes). Repetir uno aleatorio
+  // tampoco sirve (la nota oscila por suerte). La solucion estandar son formas
+  // PARALELAS: preguntas distintas cada semana pero con el mismo reparto exacto
+  // de puntos que el examen real (12 de 1pt + 14 de 2pt + 19 de 3pt = 97).
+  function _prng(seed) {
+    var a = seed >>> 0;
+    return function() {
+      a += 0x6D2B79F5; var x = a;
+      x = Math.imul(x ^ (x >>> 15), x | 1);
+      x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  var CUOTA = {1:12, 2:14, 3:19};   // 12 + 28 + 57 = 97 puntos exactos
+
+  function buildPrueba(all, semana) {
+    var sem = semana || BRAIN.semanaDeEstudio();
+    var rnd = _prng(sem * 7919 + 13);
+    var out = [];
+    [1,2,3].forEach(function(pts) {
+      var pool = all.filter(function(q){ return (q.p||1) === pts; });
+      // barajado determinista: la misma semana da siempre la misma forma
+      var orden = pool.map(function(q){ return {q:q, k:rnd()}; })
+                      .sort(function(a,b){ return a.k - b.k; })
+                      .map(function(x){ return x.q; });
+      out = out.concat(orden.slice(0, CUOTA[pts]));
     });
+    return _shA(_int(out));
+  }
 
-    var unseen = all.filter(function(q){return !s.seen[q.id];})
-      .sort(function(a,b){
-        var fa=a.fase||4, fb=b.fase||4;
-        if(fa!==fb) return fa-fb;
-        return (b.val||0)-(a.val||0);
-      }).slice(0, Math.max(0,25-due.length));
-
-    return _shA([].concat(due.slice(0,20),unseen)).slice(0,25);
+  function _int(qs) {
+    return (BRAIN.interleave ? BRAIN.interleave(qs) : qs);
   }
 
   // ─── AGENTE 3: Modo Fase 1 — Las 8 Casi-Seguras ─────────────────
@@ -220,7 +337,7 @@ var AGENTS = (function() {
       if(r) {
         var er=r.w/(r.c+r.w+0.1);
         score += er*30;
-        if(r.c>=3&&er<0.05) score -= 15; // dominada, reduce prioridad
+        if(BRAIN.isDominated(q.id)) score -= 15; // dominada, baja prioridad
         if((s.conf||{})[q.id]==='unsure') score += 10;
       } else {
         score += 20; // no vista aún
@@ -268,7 +385,7 @@ var AGENTS = (function() {
       } else {
         var er=r.w/(r.c+r.w+0.1);
         score += er*35 + (new Date(r.due)<=now?8:0);
-        if(r.c>=3&&er<0.05) score -= 10;
+        if(BRAIN.isDominated(q.id)) score -= 10;
       }
 
       if((s.conf||{})[q.id]==='unsure'||(s.conf||{})[q.id]==='doubt') score += 12;
@@ -318,7 +435,7 @@ var AGENTS = (function() {
       else {
         var er=r.w/(r.c+r.w+0.1);
         score+=er*20;
-        if(r.c>=3&&er<0.05) score-=20;
+        if(BRAIN.isDominated(q.id)) score-=20;
         if((s.conf||{})[q.id]==='sure'&&r.c>=2) score-=15;
       }
       // F1 siempre en Última Hora
@@ -419,7 +536,7 @@ var AGENTS = (function() {
     });
 
     // F1: casi-seguras
-    var f1done=IDS_FASE1.filter(function(id){var r=(s.seen||{})[id];return r&&r.c>=3&&r.w===0;}).length;
+    var f1done=BRAIN.countDominated(IDS_FASE1);
     insights.push({c:f1done===8?'g':f1done>=4?'w':'b',
       t:'F1 Casi-Seguras: '+f1done+'/8 dominadas',
       b:'Salen en 1 de cada 4 tests. Cada una = 2pts casi garantizados. IDs: '+IDS_FASE1.join(', ')
@@ -493,6 +610,7 @@ var AGENTS = (function() {
   }
 
   return {
+    planDia, buildPrueba,
     runCoach, getSRSQueue, buildFase1,
     buildRealExam, buildAdaptive, buildUltimaHora,
     buildFlash, buildVideoCrit, buildCorrectiveFeedback, buildExamFrom,

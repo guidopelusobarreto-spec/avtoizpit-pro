@@ -319,8 +319,9 @@ window.onerror = function(msg, src, line, col, err) {
    <button class="card" onclick="show('s-sections')"><span class="ci">📚</span><span class="ct">Por Sección</span><span class="cd">R1 a R6 • elige la débil</span></button>
    <button class="card" onclick="openFlash()"><span class="ci">🃏</span><span class="ct">Flashcards</span><span class="cd">Vocabulario BG-ES</span></button>
    <button class="card" onclick="openGlos()"><span class="ci">🔎</span><span class="ct">Glosario</span><span class="cd">Términos técnicos</span></button>
+   <button class="card" onclick="openConfusiones()"><span class="ci">&#x1F500;</span><span class="ct">Confusiones</span><span class="cd">Lo que fallas siempre igual</span></button>
    <button class="card" onclick="openLeyes()"><span class="ci">⚖️</span><span class="ct">Leyes</span><span class="cd">Prioridad y casos • con audio</span></button>
-   <button class="card" onclick="openAnalytics()"><span class="ci">📊</span><span class="ct">Análisis</span><span class="cd">6 agentes • superlearning</span></button>
+   <button class="card" onclick="openAnalytics()"><span class="ci">📊</span><span class="ct">Análisis</span><span class="cd">4 agentes • superlearning</span></button>
    <button class="card" onclick="openProg()"><span class="ci">🏆</span><span class="ct">Progreso</span><span class="cd">Stats, calendario y logros</span></button>
   </div>
   <div style="height:70px"></div>
@@ -615,13 +616,29 @@ window.onerror = function(msg, src, line, col, err) {
    <input class="sett-inp" id="new-pw-inp" type="password" placeholder="Nueva contraseña" style="margin-top:8px">
    <button class="sett-btn" onclick="changePassword()">Cambiar</button>
   </div>
+  <!-- Pausa de recuperacion -->
+  <div class="sett-row">
+   <div class="sett-lbl">&#x1F914; Pausa de recuperaci&oacute;n</div>
+   <div class="sett-sub">Tras responder, espera 3 segundos antes de mostrar la explicaci&oacute;n para que intentes explic&aacute;rtela t&uacute;. Recordar por qu&eacute; consolida mucho m&aacute;s que leer. No act&uacute;a en ex&aacute;menes.</div>
+   <button id="recup-btn" class="sett-btn" style="margin-top:8px" onclick="togglePausaRecup()">Activada (3s)</button>
+  </div>
+  <!-- Reiniciar progreso -->
+  <div class="sett-row">
+   <div class="sett-lbl">&#x267B;&#xFE0F; Reiniciar progreso</div>
+   <div class="sett-sub">Borra respuestas, racha, simulacros y estad&iacute;sticas. Conserva contrase&ntilde;a, tema, tama&ntilde;o de letra, fecha de examen y clave de API. Pide doble confirmaci&oacute;n.</div>
+   <button class="sett-btn" style="margin-top:8px;background:#7f1d1d;color:#fff" onclick="resetProgreso()">&#x1F5D1;&#xFE0F; Borrar mi progreso</button>
+  </div>
   <!-- Info -->
   <div class="sett-row" style="font-size:0.6rem;color:#8b949e;line-height:1.8">
-   Авто Изпит PRO v5.0 • 1487 preguntas • 6 agentes<br>
+   Авто Изпит PRO v5.0 • 1487 preguntas • 4 agentes<br>
    MREST 100% traducido ES • Superlearning integrado<br>
    Distribución real: 200 tests КАТ analizados
   </div>
  </div>
+</div>
+<div id="s-confus" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div class="htitle">&#x1F500; Confusiones</div></div>
+ <div class="body" id="conf-list"></div>
 </div>
 <div class="to" id="tutor">
  <div class="tp">
@@ -646,7 +663,9 @@ window.onerror = function(msg, src, line, col, err) {
 <script src="data-traps.js"></script>
 <script src="data-pts3.js"></script>
 <script src="data-multi.js"></script>
-<script src="data-mrest.js"></script>
+<script src="data-mrest1.js"></script>
+<script src="data-mrest2.js"></script>
+<script src="data-mrest3.js"></script>
 <script src="data-vids.js"></script>
 <script src="data-glos.js"></script>
 <script src="data-vocab.js"></script>
@@ -688,7 +707,7 @@ window.onerror = function(msg, src, line, col, err) {
     window.ALL_MAP = ALL_MAP;
     if (typeof BRAIN !== 'undefined') BRAIN.initFreq(ALL);
     var sub = document.getElementById('hero-sub');
-    if (sub) sub.textContent = ALL.length + ' preg • 6 agentes • Simulacro Real • TTS búlgaro';
+    if (sub) sub.textContent = ALL.length + ' preg • 4 agentes • Simulacro Real • TTS búlgaro';
     console.log('[App] Banco cargado:', ALL.length, 'preguntas');
   }
 
