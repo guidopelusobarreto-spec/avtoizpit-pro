@@ -232,6 +232,9 @@ html,body{height:100%;background:var(--bg);color:var(--fg);font-family:-apple-sy
 /* ── Botón TTS español ── */
 .btn-speak-es{background:none;border:1px solid var(--acc);border-radius:6px;color:var(--acc);font-size:0.6rem;padding:3px 8px;cursor:pointer;margin-top:6px}
 .btn-speak-es:active{opacity:.7}
+.card.bloq{opacity:.38;filter:grayscale(.7)}
+.card.bloq .cd{color:#f59e0b!important}
+#guiado-aviso{background:rgba(59,130,246,.10);border:1px solid #3b82f6;border-radius:10px;padding:10px 12px;margin:0 0 10px;font-size:.62rem;color:var(--fg2);line-height:1.5}
 </style>
 <script>
 window.onerror = function(msg, src, line, col, err) {
@@ -274,6 +277,7 @@ window.onerror = function(msg, src, line, col, err) {
   </div>
   <div class="pw2"><div class="pl"><span>Progreso global</span><span id="gpct">0%</span></div><div class="pb"><div class="pbf" id="gbar" style="width:0%"></div></div></div>
   <div class="sec-lbl">🎯 Plan: 97pts en &lt;20 min</div>
+  <div id="guiado-aviso" style="display:none">&#x1F393; <b>Modo guiado activo.</b> Solo est&aacute; abierto lo que toca hoy seg&uacute;n el plan. Lo dem&aacute;s se desbloquea al cerrar el d&iacute;a, o desactiva el modo guiado en Ajustes.</div>
   <div class="grid">
    <button class="card hi full" onclick="openMisionDia()" style="background:rgba(249,115,22,.08);border-color:var(--acc)"><span class="ci">🗓️</span><span class="ct">Misión de Hoy</span><span class="cd">Qué estudiar exactamente ahora mismo</span></button>
    <button class="card hi" onclick="mod('fase1')" style="border-color:var(--acc)"><span class="ci">🎯</span><span class="ct">F1: Casi-Seguras</span><span class="cd">8 preg >20% freq • dominar PRIMERO</span></button>
@@ -362,6 +366,7 @@ window.onerror = function(msg, src, line, col, err) {
    <div class="rs2"><div class="n" id="rt">0:00</div><div class="l">Tiempo</div></div>
   </div>
   <div class="rbs">
+   <div id="res-siguiente"></div>
    <div id="res-extra" style="display:none"></div>
    <button class="rbtn p" onclick="openReview()">🔍 Revisar errores</button>
    <button class="rbtn p" id="btn-corrective" onclick="startCorrectiveFeedback()" style="display:none">🎯 Repasar falladas</button>
@@ -615,6 +620,12 @@ window.onerror = function(msg, src, line, col, err) {
    <div class="sett-lbl">🔒 Cambiar contraseña</div>
    <input class="sett-inp" id="new-pw-inp" type="password" placeholder="Nueva contraseña" style="margin-top:8px">
    <button class="sett-btn" onclick="changePassword()">Cambiar</button>
+  </div>
+  <!-- Modo guiado -->
+  <div class="sett-row">
+   <div class="sett-lbl">&#x1F393; Modo guiado (El Profesor manda)</div>
+   <div class="sett-sub">Bloquea los modos que no est&aacute;n en el plan de hoy y te dice exactamente qu&eacute; hacer al terminar cada sesi&oacute;n. Al cerrar el d&iacute;a se desbloquea todo. Desact&iacute;valo si prefieres elegir t&uacute;.</div>
+   <button id="guiado-btn" class="sett-btn" style="margin-top:8px" onclick="toggleGuiado()">Activado</button>
   </div>
   <!-- Pausa de recuperacion -->
   <div class="sett-row">

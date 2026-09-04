@@ -199,6 +199,102 @@ var AGENTS = (function() {
     return Math.max(10, Math.min(45, necesarias));
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // FAMILIAS DE REGLAS
+  // ═══════════════════════════════════════════════════════════════
+  // Fallar 3 preguntas sueltas no dice nada. Fallar 3 de las 8 que dependen
+  // de la MISMA regla madre dice exactamente que estudiar. Cada caso de la
+  // seccion Leyes es una familia: lleva la lista de preguntas que dependen
+  // de el, asi que el diagnostico sale de ahi sin inventar agrupaciones.
+
+  function _idsDeCaso(c) {
+    return String(c.p || '').split(',')
+      .map(function(x){ return parseInt(x, 10); })
+      .filter(function(x){ return !isNaN(x); });
+  }
+
+  function getFamilias() {
+    if (typeof CASOS === 'undefined' || !CASOS.length) return [];
+    var s = BRAIN.get();
+    return CASOS.map(function(c) {
+      var ids = _idsDeCaso(c);
+      var dom = 0, fall = 0, vistas = 0, aciertos = 0, intentos = 0;
+      ids.forEach(function(id) {
+        var r = (s.seen || {})[id];
+        if (BRAIN.isDominated(id)) dom++;
+        if ((s.err || {})[id]) fall++;
+        if (r) {
+          vistas++;
+          aciertos += (r.c || 0);
+          intentos += (r.c || 0) + (r.w || 0);
+        }
+      });
+      return {
+        id: c.id, t: c.t, art: c.art || '', total: ids.length, ids: ids,
+        dominadas: dom, falladas: fall, vistas: vistas,
+        pct: ids.length ? Math.round(dom / ids.length * 100) : 0,
+        acierto: intentos ? Math.round(aciertos / intentos * 100) : null,
+        leida: BRAIN.leyLeida(c.id)
+      };
+    });
+  }
+
+  // Familia debil: la has tocado lo suficiente para tener datos y aun asi
+  // fallas en varias de sus preguntas. Ordenadas por cuantas fallas.
+  function familiasDebiles(minFallos) {
+    var min = minFallos || 2;
+    return getFamilias()
+      .filter(function(f){ return f.falladas >= min && f.pct < 70; })
+      .sort(function(a, b){
+        if (b.falladas !== a.falladas) return b.falladas - a.falladas;
+        return a.pct - b.pct;
+      });
+  }
+
+  function familiaPorId(id) {
+    return getFamilias().filter(function(f){ return f.id === id; })[0] || null;
+  }
+
+  // Frase de diagnostico lista para mostrar
+  function fraseFamilia(f) {
+    if (!f) return '';
+    if (f.falladas) {
+      return 'Fallas ' + f.falladas + ' de las ' + f.total + ' preguntas de «' + f.t + '»' +
+             (f.leida ? '' : ' — y todavía no has leído la regla');
+    }
+    return 'Dominas ' + f.dominadas + ' de ' + f.total + ' en «' + f.t + '»';
+  }
+
+  // ─── Qué ley toca leer hoy ────────────────────────────────────────
+  // Elegimos el caso de estudio que cubre MÁS preguntas que aún no dominas.
+  // Leer la regla antes de practicarla es lo que convierte el acierto en
+  // comprensión: sin la regla delante, aciertas por reconocimiento visual
+  // y eso no se transfiere a las preguntas gemelas del examen.
+  function leyDeHoy() {
+    if (typeof CASOS === 'undefined' || !CASOS.length) return null;
+    // Prioridad 1: la familia en la que MAS fallas y cuya regla no has leido.
+    // Es el diagnostico mas directo que existe: fallas ahi porque no sabes
+    // la regla, no porque te despistes.
+    var debiles = familiasDebiles(2).filter(function(f){ return !f.leida; });
+    if (debiles.length) {
+      var c1 = CASOS.filter(function(c){ return c.id === debiles[0].id; })[0];
+      return { caso: c1, pendientes: debiles[0].total - debiles[0].dominadas,
+               total: debiles[0].total, motivo: 'fallos', fam: debiles[0] };
+    }
+    // Prioridad 2: la que cubre mas preguntas sin dominar.
+    var mejor = null, mejorN = 0;
+    CASOS.forEach(function(c) {
+      if (BRAIN.leyLeida(c.id)) return;
+      var ids = _idsDeCaso(c);
+      if (!ids.length) return;
+      var pendientes = ids.filter(function(id){ return !BRAIN.isDominated(id); }).length;
+      if (pendientes > mejorN) { mejorN = pendientes; mejor = c; }
+    });
+    if (!mejor) return null;
+    return { caso: mejor, pendientes: mejorN, total: _idsDeCaso(mejor).length,
+             motivo: 'cobertura' };
+  }
+
   function planDia(all, vids) {
     var s = BRAIN.get();
     var m = BRAIN.getMetrics();
@@ -214,11 +310,30 @@ var AGENTS = (function() {
 
     var b = [];
 
+    // La lectura va PRIMERA: la regla antes que la práctica.
+    var ley = leyDeHoy();
+    if (ley) {
+      b.push({ id:'ley', emoji:'📖', t:'Estudiar la ley: ' + ley.caso.t,
+        detalle: ley.pendientes + ' de ' + ley.total + ' preguntas sin dominar dependen de ella',
+        porque:'Va primero a propósito. Si practicas sin haber leído la regla aciertas por reconocer la foto, y eso no te sirve cuando el examen te pregunta lo mismo con otra imagen. Léela, escúchala si quieres, y márcala como estudiada.',
+        min: 6, fn: "abrirLey('" + ley.caso.id + "')", ley: ley.caso.id });
+    }
+
     if (m.due > 0) {
       b.push({ id:'srs', emoji:'🔁', t:'Repaso vencido',
         detalle: m.due + ' preguntas tocan hoy',
         porque:'Lo vencido es lo que estas a punto de olvidar. Repasarlo hoy vale mucho mas que manana.',
         min: Math.max(2, Math.round(m.due * 0.4)), fn:"mod('srs')" });
+    }
+
+    var debil = familiasDebiles(2)[0];
+    if (debil) {
+      b.push({ id:'familia', emoji:'🧩', t:'Reforzar: ' + debil.t,
+        detalle: 'fallas ' + debil.falladas + ' de sus ' + debil.total + ' preguntas',
+        porque:'No son fallos sueltos: las ' + debil.total + ' dependen de la misma regla. ' +
+               'Arreglar la regla arregla todas de golpe, y es lo que separa aprobar de ir aprobando.',
+        min: Math.max(4, Math.round(debil.total * 0.6)), fn: "mod('fam_" + debil.id + "')",
+        familia: debil.id });
     }
 
     if (confus > 0) {
@@ -610,7 +725,8 @@ var AGENTS = (function() {
   }
 
   return {
-    planDia, buildPrueba,
+    planDia, buildPrueba, leyDeHoy,
+    getFamilias, familiasDebiles, familiaPorId, fraseFamilia,
     runCoach, getSRSQueue, buildFase1,
     buildRealExam, buildAdaptive, buildUltimaHora,
     buildFlash, buildVideoCrit, buildCorrectiveFeedback, buildExamFrom,

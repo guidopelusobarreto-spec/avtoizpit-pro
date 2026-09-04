@@ -41,7 +41,7 @@ var BRAIN = (function() {
   function defaultState() {
     return {
       seen: {}, err: {}, conf: {}, vocab: {}, wrong: {},
-      firstTry: {ok:0, total:0}, checkpoints: [], plan: {},
+      firstTry: {ok:0, total:0}, checkpoints: [], plan: {}, leidas: {},
       unknownWords: [], exams: [], sessions: [],
       cal: {}, streak: 0, lastDay: null,
       achievements: {}, sp: {}, fcDone: {},
@@ -60,8 +60,50 @@ var BRAIN = (function() {
     };
   }
 
+  // ─── Escritura en disco con buffer ────────────────────────────────
+  // Antes cada respuesta serializaba TODO el estado y lo escribia en
+  // localStorage. Con 1487 preguntas el JSON crece y esa escritura es
+  // sincrona: bloquea el hilo justo cuando el usuario pulsa. Ahora
+  // marcamos el estado como sucio y volcamos como mucho cada segundo y
+  // medio, mas un volcado inmediato en los momentos criticos.
+  var _sucio = false, _temporizador = null, _MS = 1500, _escrituras = 0;
+
+  function _volcar() {
+    if (_temporizador) { clearTimeout(_temporizador); _temporizador = null; }
+    if (!_sucio) return false;
+    try {
+      localStorage.setItem(VERSION, JSON.stringify(STATE));
+      _sucio = false; _escrituras++;
+      return true;
+    } catch(e) {
+      // si falla (cuota llena, modo privado) dejamos el estado sucio
+      // para reintentarlo en el proximo volcado en vez de perderlo
+      return false;
+    }
+  }
+
   function save() {
-    try { localStorage.setItem(VERSION, JSON.stringify(STATE)); } catch(e) {}
+    _sucio = true;
+    if (!_temporizador) _temporizador = setTimeout(_volcar, _MS);
+  }
+
+  // Volcado inmediato: fin de sesion, examen, checkpoint, reset.
+  function saveNow() { _sucio = true; return _volcar(); }
+
+  function statsEscritura() {
+    return { pendiente: _sucio, escrituras: _escrituras, ms: _MS };
+  }
+
+  // Nunca perder datos al cerrar, minimizar o cambiar de pestana.
+  // pagehide es el unico fiable en iOS; visibilitychange cubre Android.
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'hidden') _volcar();
+    });
+  }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('pagehide', _volcar);
+    window.addEventListener('beforeunload', _volcar);
   }
 
   // ─── Frecuencias reales ───────────────────────────────────────────
@@ -211,7 +253,7 @@ var BRAIN = (function() {
       ['aipro8','aipro7','aipro6'].forEach(function(v){ localStorage.removeItem(v); });
     } catch(e) {}
     STATE = defaultState();
-    save();
+    saveNow();
     return true;
   }
 
@@ -260,7 +302,7 @@ var BRAIN = (function() {
     }).slice(-30);
     if (STATE.exams.length>50) STATE.exams = STATE.exams.slice(-50);
     _checkAchievements();
-    save();
+    saveNow();
   }
 
   function recordRealExam(data) {
@@ -271,7 +313,7 @@ var BRAIN = (function() {
       mode: 'realexam'
     }).slice(-30);
     if (STATE.realExams.length>30) STATE.realExams = STATE.realExams.slice(-30);
-    save();
+    saveNow();
   }
 
   function recordSession(mode, questionsCount, durationSec) {
@@ -282,7 +324,7 @@ var BRAIN = (function() {
     });
     STATE.profile.sessionsCount = (STATE.profile.sessionsCount||0)+1;
     if (STATE.sessions.length>100) STATE.sessions = STATE.sessions.slice(-100);
-    save();
+    saveNow();
   }
 
   function markWordKnown(key, known) {
@@ -435,7 +477,7 @@ var BRAIN = (function() {
       seg: datos.seg || 0,
       estimado: datos.estimado || null
     }).slice(-30);
-    save();
+    saveNow();
   }
 
   function getCheckpoints() { return (STATE.checkpoints || []).slice(); }
@@ -444,6 +486,29 @@ var BRAIN = (function() {
     var c = STATE.checkpoints || [];
     if (!c.length) return (STATE.firstTry || {}).total >= 20;   // el primero, tras rodaje
     return (Date.now() - c[c.length-1].ts) >= 7 * 86400000;
+  }
+
+  // ─── Leyes estudiadas ─────────────────────────────────────────────
+  // Una ley no se "estudia" una vez y ya está: se relee. Guardamos cuándo
+  // la leíste por última vez y la damos por caducada a los 10 días, para
+  // que vuelva a entrar en el plan.
+  var CADUCA_LEY = 10 * 86400000;
+
+  function marcarLeyLeida(id) {
+    if (!STATE.leidas) STATE.leidas = {};
+    STATE.leidas[id] = Date.now();
+    save();
+  }
+
+  function leyLeida(id) {
+    var ts = (STATE.leidas || {})[id];
+    return !!ts && (Date.now() - ts) < CADUCA_LEY;
+  }
+
+  function diasDesdeLey(id) {
+    var ts = (STATE.leidas || {})[id];
+    if (!ts) return null;
+    return Math.floor((Date.now() - ts) / 86400000);
   }
 
   // ─── Plan diario: marcar bloques hechos ───────────────────────────
@@ -676,6 +741,8 @@ var BRAIN = (function() {
     getSkillEstimate, baseAcierto, pAcierto,
     semanaDeEstudio, recordCheckpoint, getCheckpoints, tocaCheckpoint,
     marcarBloque, bloquesHechos,
+    marcarLeyLeida, leyLeida, diasDesdeLey,
+    saveNow, flush: saveNow, statsEscritura,
     interleave: _interleave,
     shuffle: _shuffle, shA: _shA,
     VERSION

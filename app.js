@@ -270,13 +270,51 @@ function buildAll() {
 }
 
 // ── UI ────────────────────────────────────────
-function show(id) {
+// ── Pila de pantallas para el boton ATRAS del movil ──────────────
+// Antes cada show() dejaba el historial del navegador intacto, asi que el
+// boton fisico de atras salia de la PWA. Ahora cada pantalla empuja un
+// estado y popstate nos devuelve a la anterior.
+var _PILA = ['home'];
+var _navInterna = false;
+
+function _volverAtras() {
+  // dentro de una sesion de preguntas, atras NO debe perder el progreso
+  var act = _PILA[_PILA.length-1];
+  if (act === 's-quiz') {
+    if (S && S.idx > 0 && !S.done) {
+      if (!confirm('¿Salir de la sesión?\n\nLlevas ' + S.idx + ' preguntas. El progreso de cada pregunta ya está guardado, pero la sesión se cierra.')) {
+        history.pushState({s:'s-quiz'}, '', '');   // reponer el estado consumido
+        return;
+      }
+    }
+    if (typeof TIMER !== 'undefined' && TIMER) { clearInterval(TIMER); TIMER = null; }
+    _PILA = ['home']; show('home', true); return;
+  }
+  _PILA.pop();
+  var prev = _PILA[_PILA.length-1] || 'home';
+  if (_PILA.length === 0) _PILA = ['home'];
+  show(prev, true);
+}
+
+window.addEventListener('popstate', function(){ _volverAtras(); });
+
+function backC() { _volverAtras(); }
+window.backC = backC;
+
+function show(id, sinHistorial) {
+  if (!sinHistorial) {
+    if (_PILA[_PILA.length-1] !== id) {
+      if (id === 'home') _PILA = ['home'];
+      else _PILA.push(id);
+      try { history.pushState({s:id}, '', ''); } catch(e) {}
+    }
+  }
   try {
     document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
     var el = document.getElementById(id);
     if (!el) { console.warn('[show] elemento no encontrado:', id); return; }
     el.classList.add('active');
-    if (id === 'home') { try{uhome();}catch(e){console.warn(e);} try{doCoach();}catch(e){console.warn(e);} try{renderExamCountdown();}catch(e){console.warn(e);} }
+    if (id === 'home') { try{aplicarModoGuiado();}catch(e){console.warn(e);} try{uhome();}catch(e){console.warn(e);} try{doCoach();}catch(e){console.warn(e);} try{renderExamCountdown();}catch(e){console.warn(e);} }
     if (id === 's-prog') try{rendProg();}catch(e){console.warn(e);}
     if (id === 's-sett') {
       try {
@@ -385,6 +423,15 @@ function mod(m) {
     title = 'Prueba patrón · semana ' + BRAIN.semanaDeEstudio();
     sub = '45 preg • 97 pts • misma estructura cada semana';
     explain = false; exam = true; timed = true; timeLimit = 2400; dryRun = true;
+  } else
+  if (typeof m === 'string' && m.indexOf('fam_') === 0) {
+    var _fam = AGENTS.familiaPorId(m.slice(4));
+    if (!_fam) { toast('Familia no encontrada'); return; }
+    qs = BRAIN.shA(BRAIN.interleave(_fam.ids.map(function(id){ return ALL_MAP[id]; }).filter(Boolean)));
+    if (!qs.length) { toast('Sin preguntas en esta familia'); return; }
+    title = 'Familia: ' + _fam.t;
+    sub = qs.length + ' preg de la misma regla · dominas ' + _fam.dominadas + '/' + _fam.total;
+    explain = true;
   } else
   if (m === 'confus') {
     title='Confusiones'; sub='las que fallas siempre igual'; explain=true;
@@ -704,6 +751,104 @@ function renderQ() {
   }
 }
 
+// ── MODO GUIADO ──────────────────────────────────────────────────
+// El Profesor decide QUE toca hoy. Con el modo guiado activo, los modos
+// que no estan en el plan del dia quedan bloqueados: no es un castigo,
+// es que elegir bien que estudiar es justo lo dificil, y esa decision es
+// precisamente el trabajo del entrenador.
+function _guiadoOn() { return localStorage.getItem('guiado_off') !== '1'; }
+
+function _modosPermitidos() {
+  var permitidos = {};
+  try {
+    var plan = AGENTS.planDia(ALL, VIDS);
+    plan.bloques.forEach(function(b){
+      if (b.hecho) return;                       // lo hecho ya no hace falta
+      var m = (b.fn.match(/mod\('([^']+)'\)/)||[])[1];
+      if (m) permitidos[m] = b.t;
+    });
+    // si el dia esta cerrado, se abre todo: ya ha hecho lo que tocaba
+    if (plan.cerrado) return null;
+  } catch(e) { return null; }
+  // siempre accesibles: consulta, no practica
+  ['flash','banco'].forEach(function(m){ permitidos[m] = 1; });
+  return permitidos;
+}
+
+function aplicarModoGuiado() {
+  var permitidos = _guiadoOn() ? _modosPermitidos() : null;
+  document.querySelectorAll('[onclick^="mod("]').forEach(function(btn){
+    var m = (btn.getAttribute('onclick')||'').match(/mod\('([^']+)'\)/);
+    if (!m) return;
+    var modo = m[1];
+    btn.classList.remove('bloq');
+    var cd = btn.querySelector('.cd');
+    if (cd && btn.dataset.cdOrig) { cd.textContent = btn.dataset.cdOrig; }
+    if (!permitidos) return;
+    if (permitidos[modo]) return;
+    btn.classList.add('bloq');
+    if (cd) {
+      if (!btn.dataset.cdOrig) btn.dataset.cdOrig = cd.textContent;
+      cd.textContent = '🔒 Hoy no toca';
+    }
+  });
+  var av = document.getElementById('guiado-aviso');
+  if (av) av.style.display = (permitidos ? '' : 'none');
+}
+window.aplicarModoGuiado = aplicarModoGuiado;
+
+function toggleGuiado() {
+  var off = localStorage.getItem('guiado_off') === '1';
+  localStorage.setItem('guiado_off', off ? '0' : '1');
+  var b = document.getElementById('guiado-btn');
+  if (b) b.textContent = off ? 'Activado' : 'Desactivado';
+  try { aplicarModoGuiado(); } catch(e) {}
+}
+window.toggleGuiado = toggleGuiado;
+
+// intercepta mod() cuando el modo esta bloqueado
+var _modOrig = null;
+function _modGuard(m) {
+  var permitidos = _guiadoOn() ? _modosPermitidos() : null;
+  if (permitidos && !permitidos[m] && String(m).indexOf('sec_') !== 0 && String(m).indexOf('fam_') !== 0) {
+    var sig = AGENTS.planDia(ALL, VIDS).bloques.filter(function(b){return !b.hecho;})[0];
+    if (sig && sig.ley) {
+      toast('📖 Antes toca leer la ley de hoy');
+      abrirLey(sig.ley);
+      return;
+    }
+    toast('🔒 Hoy no toca. El Profesor pide: ' + (sig ? sig.t : 'nada más por hoy'));
+    openMisionDia();
+    return;
+  }
+  return _modOrig(m);
+}
+
+// ── Siguiente paso al terminar una sesion ────────────────────────
+function _pintarSiguientePaso() {
+  var cont = document.getElementById('res-siguiente');
+  if (!cont) return;
+  var plan, sig;
+  try { plan = AGENTS.planDia(ALL, VIDS); } catch(e) { cont.innerHTML=''; return; }
+  sig = plan.bloques.filter(function(b){ return !b.hecho; })[0];
+  if (!sig) {
+    cont.innerHTML = '<div style="background:rgba(34,197,94,.12);border:1px solid #22c55e;'+
+      'border-radius:10px;padding:14px;margin-bottom:10px;text-align:left">'+
+      '<div style="font-weight:800;color:var(--fg);margin-bottom:4px">✅ Has terminado el día</div>'+
+      '<div style="font-size:12px;color:var(--fg2);line-height:1.6">Seguir ahora rinde poco: '+
+      'lo estudiado necesita una noche para consolidarse. Vuelve mañana.</div></div>';
+    return;
+  }
+  cont.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--acc);border-radius:10px;'+
+    'padding:14px;margin-bottom:10px;text-align:left">'+
+    '<div style="font-size:11px;color:var(--fg3);text-transform:uppercase;letter-spacing:.5px">Ahora toca</div>'+
+    '<div style="font-weight:800;color:var(--fg);margin:2px 0 4px">'+sig.emoji+' '+esc(sig.t)+'</div>'+
+    '<div style="font-size:12px;color:var(--fg3);line-height:1.5;margin-bottom:10px">'+esc(sig.porque)+'</div>'+
+    '<button class="rbtn p" style="width:100%" onclick="'+sig.fn+'">Empezar · '+esc(sig.detalle)+' · ~'+sig.min+' min</button>'+
+    '</div>';
+}
+window._pintarSiguientePaso = _pintarSiguientePaso;
+
 // ── Meta de tiempo decreciente por pregunta ──────────────────────
 function _metaSeg(id) {
   try {
@@ -916,6 +1061,7 @@ function endS() {
   // marcar el bloque del plan de hoy como hecho
   try {
     var _mapa = {srs:'srs', confus:'confus', errors:'errores', quick:'velocidad', prueba:'prueba'};
+    if (String(S.mode).indexOf('fam_') === 0) _mapa[S.mode] = 'familia';
     var _b = _mapa[S.mode] || (String(S.mode).indexOf('fase')===0 ? 'nuevas' : null);
     if (_b) BRAIN.marcarBloque(_b);
   } catch(e) {}
@@ -945,6 +1091,8 @@ function endS() {
   if(S.mode==='set'&&S.si!==undefined){
     BRAIN.get().sp['s'+S.si]={seen:S.qs.length,ok:S.ok};BRAIN.save();
   }
+
+  try { _pintarSiguientePaso(); } catch(e) {}
 
   var pass=S.score>=87;
   var pct=Math.round(S.score/(S.maxS||1)*100);
@@ -1024,11 +1172,6 @@ window.startCorrectiveFeedback=startCorrectiveFeedback;
 function retry(){
   if(TIMER){clearInterval(TIMER);TIMER=null;}
   begin(Object.assign({},S,{idx:0,score:0,ok:0,ko:0,t0:Date.now(),qs:BRAIN.shA(BRAIN.shuffle([].concat(S.qs)))}));
-}
-function backC(){
-  if(TIMER){clearInterval(TIMER);TIMER=null;}
-  if(!S||(!S.done&&S.idx===0)){show('home');return;}
-  if(confirm('Salir?'))show('home');
 }
 function togLang(){
   S.showES=!S.showES;
@@ -1384,6 +1527,37 @@ function openMisionDia() {
       'necesita una noche para consolidarse. Vuelve mañana.</div>';
   }
 
+  // ── familias de reglas: el diagnostico por regla madre
+  var fams = [];
+  try { fams = AGENTS.getFamilias().filter(function(f){ return f.vistas > 0; }); } catch(e) {}
+  if (fams.length) {
+    fams.sort(function(a,b){
+      if (b.falladas !== a.falladas) return b.falladas - a.falladas;
+      return a.pct - b.pct;
+    });
+    h += '<div style="margin-top:18px;font-size:13px;font-weight:700;color:var(--fg)">Familias de reglas</div>'+
+         '<div style="font-size:11px;color:var(--fg3);margin-bottom:8px">Cada familia son las preguntas '+
+         'que dependen de UNA misma regla. Fallar varias de la misma familia no es despiste: '+
+         'es que falta la regla.</div>';
+    fams.slice(0, 10).forEach(function(f){
+      var col = f.falladas >= 2 ? '#ef4444' : f.pct >= 70 ? '#22c55e' : '#eab308';
+      h += '<button onclick="mod(\'fam_'+f.id+'\')" style="display:block;width:100%;text-align:left;'+
+        'background:var(--bg2);border:1px solid var(--bg4);border-radius:8px;'+
+        'padding:10px 12px;margin-bottom:6px;cursor:pointer">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'+
+          '<div style="font-size:12px;font-weight:700;color:var(--fg);flex:1">'+esc(f.t)+'</div>'+
+          '<div style="font-size:12px;font-weight:700;color:'+col+'">'+f.dominadas+'/'+f.total+'</div>'+
+        '</div>'+
+        '<div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;margin:6px 0 4px">'+
+          '<div style="height:100%;width:'+f.pct+'%;background:'+col+'"></div></div>'+
+        '<div style="font-size:11px;color:var(--fg3)">'+
+          (f.falladas ? '✗ fallas '+f.falladas+' de '+f.total : 'sin fallos pendientes')+
+          (f.leida ? ' · regla leída' : ' · 📖 regla sin leer')+
+          (f.art ? ' · '+esc(f.art) : '')+'</div>'+
+        '</button>';
+    });
+  }
+
   // ── historial de mediciones
   if (cps.length) {
     h += '<div style="margin-top:18px;font-size:13px;font-weight:700;color:var(--fg)">Mediciones semanales</div>'+
@@ -1493,7 +1667,7 @@ function verLeyes(tipo) {
     '<button class="sett-btn" style="flex:0 0 auto;margin-top:0;background:var(--bg3);color:var(--fg)" onclick="pararLey()">\u23f9\ufe0f</button></div>';
   for (var i = 0; i < arr.length; i++) {
     var L = arr[i];
-    html += '<div class="sett-row">' +
+    html += '<div class="sett-row"' + (tipo === 'casos' ? ' id="caso-' + L.id + '"' : '') + '>' +
       '<div style="display:flex;align-items:flex-start;gap:8px">' +
       '<div style="flex:1"><div class="sett-lbl">' + L.t + '</div>' +
       '<div class="sett-sub" style="margin-bottom:0">' +
@@ -1511,6 +1685,15 @@ function verLeyes(tipo) {
           '<div class="exp-b" style="margin-top:6px">' + im.a + '</div></div>';
       }
     }
+    if (tipo === 'casos') {
+      var leida = BRAIN.leyLeida(L.id);
+      var d = BRAIN.diasDesdeLey(L.id);
+      html += '<button class="sett-btn" style="margin-top:10px;width:100%;' +
+        (leida ? 'background:var(--bg3);color:var(--fg3)' : 'background:#166534;color:#fff') +
+        '" onclick="leyEstudiada(\'' + L.id + '\')">' +
+        (leida ? '\u2705 Estudiada hace ' + d + (d===1?' d\u00eda':' d\u00edas') + ' \u00b7 volver a marcar'
+               : '\u2705 Ya la he estudiado') + '</button>';
+    }
     html += '</div>';
   }
   html += '<div style="height:70px"></div>';
@@ -1522,6 +1705,29 @@ function verLeyes(tipo) {
   }
 }
 function openLeyes() { show('s-leyes'); verLeyes(_leyVista); }
+
+// Abre la seccion Leyes directamente en un caso y lo desplaza a la vista.
+function abrirLey(idCaso) {
+  show('s-leyes');
+  verLeyes('casos');
+  setTimeout(function(){
+    var el = document.getElementById('caso-' + idCaso);
+    if (el) {
+      el.scrollIntoView({behavior:'smooth', block:'start'});
+      el.style.borderColor = 'var(--acc)';
+    }
+  }, 150);
+}
+window.abrirLey = abrirLey;
+
+// Marca la ley como estudiada y cierra el bloque del plan de hoy.
+function leyEstudiada(idCaso) {
+  BRAIN.marcarLeyLeida(idCaso);
+  BRAIN.marcarBloque('ley');
+  toast('📖 Ley marcada como estudiada');
+  verLeyes('casos');
+}
+window.leyEstudiada = leyEstudiada;
 function openAjustes() { show('s-sett'); actualizarBotonInstalar(); }
 window.openAjustes = openAjustes;
 window.openLeyes = openLeyes;
@@ -2220,3 +2426,8 @@ function afterLogin(){
   }, 300);
 }
 window.afterLogin = afterLogin;
+
+// activar el guardian del modo guiado sobre mod()
+_modOrig = mod;
+mod = _modGuard;
+window.mod = _modGuard;
