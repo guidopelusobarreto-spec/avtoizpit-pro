@@ -196,6 +196,16 @@ var AGENTS = (function() {
     if (pendientes === 0) return 0;
     if (dias === null || dias <= 0) return 20;              // sin fecha: ritmo comodo
     var necesarias = Math.ceil(pendientes / Math.max(1, dias));
+    // REACCIÓN A LA ÚLTIMA MEDICIÓN: si la prueba patrón salió por debajo de
+    // lo que hace falta, se sube la carga; si salió holgada, se relaja. Medir
+    // sin reaccionar no sirve de nada.
+    var cps = BRAIN.getCheckpoints();
+    if (cps.length) {
+      var pts = cps[cps.length-1].pts;
+      if (pts < 70)       necesarias = Math.ceil(necesarias * 1.35);
+      else if (pts < 87)  necesarias = Math.ceil(necesarias * 1.15);
+      else if (pts >= 94) necesarias = Math.ceil(necesarias * 0.85);
+    }
     return Math.max(10, Math.min(45, necesarias));
   }
 
@@ -265,6 +275,55 @@ var AGENTS = (function() {
     return 'Dominas ' + f.dominadas + ' de ' + f.total + ' en «' + f.t + '»';
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // PROYECCIÓN: ¿vas a llegar?
+  // ═══════════════════════════════════════════════════════════════
+  // El plan no debe salir de tus errores, debe salir de tu objetivo.
+  // Aquí se calcula hacia atrás: cuántas te faltan, cuántos días quedan,
+  // a qué ritmo vas de verdad, y si con ese ritmo llegas o no.
+
+  var META_PTS = 97, APROBADO = 87;
+
+  function proyeccion(all) {
+    var banco = all || (typeof ALL !== 'undefined' ? ALL : []);
+    if (!banco.length) return null;
+    var dias = _diasHastaExamen();
+    var pendientes = banco.filter(function(q){ return !BRAIN.isDominated(q.id); }).length;
+    var dominadas = banco.length - pendientes;
+    var ritmo = BRAIN.ritmoDominio(7);
+    var est = BRAIN.getSkillEstimate(banco) || {pts:0};
+    var cps = BRAIN.getCheckpoints();
+
+    var necesario = (dias && dias > 0) ? pendientes / dias : null;
+    var proyectadas = (ritmo && dias && dias > 0) ? dominadas + ritmo.porDia * dias : null;
+    var pctProy = proyectadas !== null ? Math.min(1, proyectadas / banco.length) : null;
+    // el nivel proyectado no es lineal con las dominadas: se apoya en la
+    // misma estimación que ya usamos, escalada por la cobertura prevista
+    var ptsProy = pctProy !== null
+      ? Math.round(97 * (0.42 + 0.55 * pctProy))
+      : null;
+
+    var veredicto = 'sin_datos', margen = null;
+    if (ritmo && necesario !== null) {
+      margen = ritmo.porDia - necesario;
+      if (ritmo.porDia >= necesario * 1.15)      veredicto = 'holgado';
+      else if (ritmo.porDia >= necesario * 0.95) veredicto = 'justo';
+      else                                       veredicto = 'no_llegas';
+    }
+
+    return {
+      dias: dias, total: banco.length, dominadas: dominadas, pendientes: pendientes,
+      necesarioPorDia: necesario !== null ? Math.ceil(necesario) : null,
+      ritmoPorDia: ritmo ? Math.round(ritmo.porDia * 10) / 10 : null,
+      diasDeHistoria: ritmo ? ritmo.muestras : 0,
+      ptsHoy: est.pts, ptsProyectados: ptsProy,
+      veredicto: veredicto, margen: margen,
+      mediciones: cps.length,
+      ultima: cps.length ? cps[cps.length-1] : null,
+      fiable: !!ritmo && cps.length >= 3
+    };
+  }
+
   // ─── Qué ley toca leer hoy ────────────────────────────────────────
   // Elegimos el caso de estudio que cubre MÁS preguntas que aún no dominas.
   // Leer la regla antes de practicarla es lo que convierte el acierto en
@@ -295,7 +354,7 @@ var AGENTS = (function() {
              motivo: 'cobertura' };
   }
 
-  function planDia(all, vids) {
+  function planDia(all, vids, presupuesto) {
     var s = BRAIN.get();
     var m = BRAIN.getMetrics();
     var hechos = BRAIN.bloquesHechos();
@@ -313,22 +372,47 @@ var AGENTS = (function() {
     // La lectura va PRIMERA: la regla antes que la práctica.
     var ley = leyDeHoy();
     if (ley) {
-      b.push({ id:'ley', emoji:'📖', t:'Estudiar la ley: ' + ley.caso.t,
+      b.push({ prio:1, orden:1, id:'ley', emoji:'📖', t:'Estudiar la ley: ' + ley.caso.t,
         detalle: ley.pendientes + ' de ' + ley.total + ' preguntas sin dominar dependen de ella',
         porque:'Va primero a propósito. Si practicas sin haber leído la regla aciertas por reconocer la foto, y eso no te sirve cuando el examen te pregunta lo mismo con otra imagen. Léela, escúchala si quieres, y márcala como estudiada.',
         min: 6, fn: "abrirLey('" + ley.caso.id + "')", ley: ley.caso.id });
     }
 
     if (m.due > 0) {
-      b.push({ id:'srs', emoji:'🔁', t:'Repaso vencido',
+      b.push({ prio:2, orden:5, id:'srs', emoji:'🔁', escalable:1, n:m.due, t:'Repaso vencido',
         detalle: m.due + ' preguntas tocan hoy',
         porque:'Lo vencido es lo que estas a punto de olvidar. Repasarlo hoy vale mucho mas que manana.',
         min: Math.max(2, Math.round(m.due * 0.4)), fn:"mod('srs')" });
     }
 
+    // Los pares trampa van ANTES que el refuerzo de familia: una incoherencia
+    // es la senal mas fuerte que existe de que estas memorizando en vez de
+    // aplicar la regla, y ademas son preguntas de f x p muy alto.
+    var inco = BRAIN.incoherencias(false);
+    if (inco.length) {
+      var npreg = inco.reduce(function(a,g){ return a + g.ids.length; }, 0);
+      b.push({ prio:4, orden:3, id:'pares', emoji:'🎭', t:'Pares trampa: aciertas una y fallas su gemela',
+        detalle: inco.length + (inco.length===1?' grupo':' grupos') + ' · ' + npreg + ' preguntas',
+        porque:'Estas preguntas tienen el MISMO enunciado y las MISMAS opciones que otra, y distinta respuesta porque cambia la imagen. Que aciertes una y falles la otra significa que respondes por el texto, no por la regla. Se estudian juntas y seguidas.',
+        min: Math.max(4, Math.round(npreg * 0.7)), fn:"mod('pares')" });
+    }
+
+    // DESTETE: preguntas que ya dominas CON la traducción delante y que
+    // todavía no has confirmado en búlgaro puro. El examen no lleva español,
+    // así que hasta que no las aciertes sin muleta no están realmente hechas.
+    var sinDestetar = BRAIN.colaDestete(all, 60);
+    if (sinDestetar.length >= 5) {
+      var lote = Math.min(20, sinDestetar.length);
+      b.push({ prio:4, orden:3, id:'destete', emoji:'🇧🇬', escalable:1, n:lote,
+        t:'Confirmar en búlgaro',
+        detalle: lote + ' de ' + sinDestetar.length + ' que dominas solo con traducción',
+        porque:'Ya sabes la respuesta; lo que falta es reconocer la pregunta sin español delante. El examen es entero en búlgaro, así que una pregunta dominada con muleta todavía no está dominada.',
+        min: Math.max(4, Math.round(lote * 0.5)), fn:"mod('destete')" });
+    }
+
     var debil = familiasDebiles(2)[0];
     if (debil) {
-      b.push({ id:'familia', emoji:'🧩', t:'Reforzar: ' + debil.t,
+      b.push({ prio:5, orden:4, id:'familia', emoji:'🧩', t:'Reforzar: ' + debil.t,
         detalle: 'fallas ' + debil.falladas + ' de sus ' + debil.total + ' preguntas',
         porque:'No son fallos sueltos: las ' + debil.total + ' dependen de la misma regla. ' +
                'Arreglar la regla arregla todas de golpe, y es lo que separa aprobar de ir aprobando.',
@@ -337,7 +421,7 @@ var AGENTS = (function() {
     }
 
     if (confus > 0) {
-      b.push({ id:'confus', emoji:'🔀', t:'Corregir confusiones',
+      b.push({ prio:6, orden:6, id:'confus', emoji:'🔀', t:'Corregir confusiones',
         detalle: confus + ' donde fallas siempre igual',
         porque:'No son despistes: eliges siempre la misma opcion equivocada. Hasta que no rompas el patron seguiran costandote puntos.',
         min: Math.max(3, Math.round(confus * 0.5)), fn:"mod('confus')" });
@@ -345,7 +429,7 @@ var AGENTS = (function() {
 
     if (nuevas > 0) {
       var nomFase = FASE_INFO[fase];
-      b.push({ id:'nuevas', emoji: nomFase.emoji, t:'Material nuevo — ' + nomFase.n,
+      b.push({ prio:3, orden:2, id:'nuevas', emoji: nomFase.emoji, escalable:1, n:nuevas, t:'Material nuevo — ' + nomFase.n,
         detalle: nuevas + ' preguntas que aun no has visto',
         porque: dias !== null
           ? 'A este ritmo cubres todo el banco antes del examen (' + dias + ' dias). Menos hoy significa mas manana.'
@@ -354,20 +438,20 @@ var AGENTS = (function() {
     }
 
     if (falladasHoy > 0) {
-      b.push({ id:'errores', emoji:'🎯', t:'Cerrar los fallos de hoy',
+      b.push({ prio:7, orden:7, id:'errores', emoji:'🎯', t:'Cerrar los fallos de hoy',
         detalle: falladasHoy + ' falladas sin recuperar',
         porque:'Una pregunta fallada y no vuelta a acertar el mismo dia se pierde. Volver a acertarla hoy es lo que la fija.',
         min:4, fn:"mod('errors')" });
     }
 
-    b.push({ id:'velocidad', emoji:'⚡', t:'Cierre cronometrado',
+    b.push({ prio:8, orden:8, id:'velocidad', emoji:'⚡', t:'Cierre cronometrado',
       detalle:'10 preguntas contrarreloj',
       porque:'Acertar y acertar RAPIDO son dos habilidades distintas. Los <20 min se entrenan aparte.',
       min:5, fn:"mod('quick')" });
 
     var toca = BRAIN.tocaCheckpoint();
     if (toca) {
-      b.push({ id:'prueba', emoji:'📏', t:'Prueba patron semanal',
+      b.push({ prio:9, orden:9, id:'prueba', emoji:'📏', t:'Prueba patron semanal',
         detalle:'45 preguntas • 97 puntos • forma nueva',
         porque:'Misma estructura que el examen real y mismo reparto de puntos cada semana, para que la nota de una semana se pueda comparar con la de otra.',
         min:25, fn:"mod('prueba')" });
@@ -376,12 +460,49 @@ var AGENTS = (function() {
     b.forEach(function(x){ x.hecho = !!hechos[x.id]; });
     var hechosN = b.filter(function(x){ return x.hecho; }).length;
 
+    // PRESUPUESTO DE TIEMPO. Si declaras cuántos minutos tienes hoy, los
+    // bloques entran por PRIORIDAD (lo que más importa si el tiempo es corto)
+    // y se muestran por ORDEN (lo que más cabeza exige, primero).
+    var pres = presupuesto || null;
+    if (pres) {
+      var acum = 0;
+      b.slice().sort(function(x,y){ return (x.prio||5) - (y.prio||5); })
+       .forEach(function(x){
+         if (x.hecho) { x.cabe = true; return; }
+         if (acum + x.min <= pres) { x.cabe = true; acum += x.min; return; }
+         // Un bloque por cantidad no se tira: se RECORTA. Si no, en los dias
+         // cortos nunca avanzas en material nuevo, que es justo lo que mas
+         // cuesta recuperar despues.
+         var resto = pres - acum;
+         if (x.escalable && x.n > 0 && resto >= 4) {
+           var porPreg = x.min / x.n;
+           var caben = Math.max(3, Math.floor(resto / porPreg));
+           if (caben < x.n) {
+             x.recortado = x.n;
+             x.n = caben;
+             x.min = Math.max(3, Math.round(caben * porPreg));
+             x.detalle = caben + ' de ' + x.recortado + ' (recortado a tu tiempo)';
+           }
+           x.cabe = true; acum += x.min; return;
+         }
+         x.cabe = false;
+       });
+    } else {
+      b.forEach(function(x){ x.cabe = true; });
+    }
+    b.sort(function(x,y){
+      if (!!x.cabe !== !!y.cabe) return x.cabe ? -1 : 1;   // lo que no cabe, al final
+      return (x.orden||5) - (y.orden||5);
+    });
+
     return {
       bloques: b,
       hechos: hechosN,
       total: b.length,
       cerrado: hechosN >= b.length,
-      minutos: b.reduce(function(a,x){ return a + (x.hecho ? 0 : x.min); }, 0),
+      minutos: b.reduce(function(a,x){ return a + ((x.hecho || x.cabe === false) ? 0 : x.min); }, 0),
+      presupuesto: presupuesto || null,
+      fuera: b.filter(function(x){ return x.cabe === false; }).length,
       minutosTotal: b.reduce(function(a,x){ return a + x.min; }, 0),
       fase: fase,
       dias: dias,
@@ -725,7 +846,7 @@ var AGENTS = (function() {
   }
 
   return {
-    planDia, buildPrueba, leyDeHoy,
+    planDia, buildPrueba, leyDeHoy, proyeccion,
     getFamilias, familiasDebiles, familiaPorId, fraseFamilia,
     runCoach, getSRSQueue, buildFase1,
     buildRealExam, buildAdaptive, buildUltimaHora,

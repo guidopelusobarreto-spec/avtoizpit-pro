@@ -41,7 +41,7 @@ var BRAIN = (function() {
   function defaultState() {
     return {
       seen: {}, err: {}, conf: {}, vocab: {}, wrong: {},
-      firstTry: {ok:0, total:0}, checkpoints: [], plan: {}, leidas: {},
+      firstTry: {ok:0, total:0}, checkpoints: [], plan: {}, leidas: {}, hist: {},
       unknownWords: [], exams: [], sessions: [],
       cal: {}, streak: 0, lastDay: null,
       achievements: {}, sp: {}, fcDone: {},
@@ -134,7 +134,7 @@ var BRAIN = (function() {
   }
 
   // ─── Registrar respuesta ──────────────────────────────────────────
-  function recordAnswer(id, ok, confidence, timeSpentSec) {
+  function recordAnswer(id, ok, confidence, timeSpentSec, modo) {
     var td = new Date().toDateString();
     var h  = new Date().getHours();
 
@@ -154,6 +154,24 @@ var BRAIN = (function() {
     if (!STATE.hourStats[h]) STATE.hourStats[h] = {ok:0,total:0};
     STATE.hourStats[h].total++;
     if (ok) STATE.hourStats[h].ok++;
+
+    // ── DESTETE DEL ESPAÑOL ────────────────────────────────────────
+    // El examen es entero en búlgaro. Registramos CÓMO respondiste:
+    //   'es'    = con la traducción delante
+    //   'pista' = en búlgaro, pero destapaste la traducción antes de responder
+    //   'bg'    = en búlgaro puro, sin mirar
+    // Solo 'bg' hace subir de nivel. Y una pista rompe la racha en búlgaro,
+    // porque acertar mirando no demuestra nada sobre el examen.
+    if (modo) {
+      r.modo = modo;
+      if (modo === 'bg') {
+        if (ok) { r.bg = (r.bg || 0) + 1; r.bgStreak = (r.bgStreak || 0) + 1; }
+        else r.bgStreak = 0;
+      } else if (modo === 'pista') {
+        r.pistas = (r.pistas || 0) + 1;
+        r.bgStreak = 0;
+      }
+    }
 
     if (timeSpentSec > 0) {
       r.timeSpent = (r.timeSpent||[]).concat(timeSpentSec).slice(-10);
@@ -351,6 +369,7 @@ var BRAIN = (function() {
 
     var due       = seenArr.filter(function(e){ return new Date(e[1].due)<=now; }).length;
     var dominated = seenArr.filter(function(e){ return _dominada(e[1], STATE.conf[e[0]]); }).length;
+    var dominatedBG = seenArr.filter(function(e){ return isDominatedBG(e[0]); }).length;
     var unsure    = Object.entries(STATE.conf||{}).filter(function(e){ return e[1]==='unsure'||e[1]==='doubt'; }).length;
 
     var exams     = (STATE.exams||[]).filter(function(e){ return e.max>0; });
@@ -404,7 +423,7 @@ var BRAIN = (function() {
     }
 
     return {
-      total, seen: seenArr.length, dominated, due, unsure,
+      total, seen: seenArr.length, dominated, dominatedBG, due, unsure,
       avgScore, trend, pct, p3pct, avgTime, slowQuestions,
       examsCount: exams.length, streak: STATE.streak,
       unknownWords: (STATE.unknownWords||[]).length,
@@ -475,7 +494,8 @@ var BRAIN = (function() {
       pts: datos.pts,
       max: datos.max || 97,
       seg: datos.seg || 0,
-      estimado: datos.estimado || null
+      estimado: datos.estimado || null,
+      fallos: (datos.fallos || []).slice(0, 60)
     }).slice(-30);
     saveNow();
   }
@@ -509,6 +529,170 @@ var BRAIN = (function() {
     var ts = (STATE.leidas || {})[id];
     if (!ts) return null;
     return Math.floor((Date.now() - ts) / 86400000);
+  }
+
+  // ─── NIVEL DE IDIOMA POR PREGUNTA ─────────────────────────────────
+  // El destete es por pregunta, no global. Cada una sube sola cuando
+  // demuestras que ya no necesitas la muleta en ESA pregunta.
+  //   0 · BG + ES        primeras veces: hay que entender qué te preguntan
+  //   1 · BG, ES a mano  la traducción existe pero hay que ir a buscarla
+  //   2 · BG puro        como el examen
+  var SUBE_A_1 = 2;   // aciertos con traducción para pasar a "ES a mano"
+  var SUBE_A_2 = 2;   // aciertos en búlgaro puro para quedarse en BG puro
+
+  function nivelIdioma(id) {
+    var r = STATE.seen[id];
+    if (!r) return 0;
+    if ((r.bgStreak || 0) >= SUBE_A_2) return 2;
+    if ((r.c || 0) >= SUBE_A_1) return 1;
+    return 0;
+  }
+
+  // Dominada DE VERDAD: dominada por contenido Y confirmada en búlgaro puro.
+  function isDominatedBG(id) {
+    if (!isDominated(id)) return false;
+    var r = STATE.seen[id];
+    return !!r && (r.bgStreak || 0) >= SUBE_A_2;
+  }
+
+  function destete(all) {
+    var banco = all || (typeof ALL !== 'undefined' ? ALL : []);
+    var n = [0, 0, 0], domBG = 0, dom = 0, conPista = 0, vistas = 0;
+    banco.forEach(function(q) {
+      var r = STATE.seen[q.id];
+      n[nivelIdioma(q.id)]++;
+      if (!r) return;
+      vistas++;
+      if (isDominated(q.id)) dom++;
+      if (isDominatedBG(q.id)) domBG++;
+      if ((r.pistas || 0) > 0) conPista++;
+    });
+    return {
+      total: banco.length, vistas: vistas,
+      nivel0: n[0], nivel1: n[1], nivel2: n[2],
+      dominadas: dom, dominadasBG: domBG,
+      pctBG: dom ? Math.round(domBG / dom * 100) : 0,
+      conPista: conPista
+    };
+  }
+
+  // Las que ya dominas con muleta pero aún no has confirmado en búlgaro.
+  // Es el motor del destete: material que ya sabes, ahora sin red.
+  function colaDestete(all, limite) {
+    var banco = all || (typeof ALL !== 'undefined' ? ALL : []);
+    return banco.filter(function(q) {
+      return isDominated(q.id) && !isDominatedBG(q.id);
+    }).sort(function(a, b) {
+      return (b.val || 0) - (a.val || 0);
+    }).slice(0, limite || 20).map(function(q){ return q.id; });
+  }
+
+  // ─── RITMO REAL ───────────────────────────────────────────────────
+  // Para saber si vas a llegar hace falta medir a qué velocidad DOMINAS,
+  // no cuántas respondes. Guardamos una foto diaria del contador y de ahí
+  // sale el ritmo de los últimos días. Sin al menos tres días de historia
+  // no se puede proyectar nada, y así hay que decirlo.
+
+  function _hoy() { return new Date().toISOString().slice(0, 10); }
+
+  // Se llama una vez al día, al abrir la app o al cerrar una sesión.
+  function fotoDelDia(all) {
+    if (!STATE.hist) STATE.hist = {};
+    var d = _hoy();
+    var banco = all || (typeof ALL !== 'undefined' ? ALL : null);
+    var dom = 0, vistas = Object.keys(STATE.seen || {}).length;
+    if (banco) dom = banco.filter(function(q){ return isDominated(q.id); }).length;
+    else dom = Object.keys(STATE.seen || {}).filter(isDominated).length;
+    var dbg = banco ? banco.filter(function(q){ return isDominatedBG(q.id); }).length : 0;
+    STATE.hist[d] = { dom: dom, vistas: vistas, domBG: dbg };
+    // 120 días bastan para cualquier proyección
+    var claves = Object.keys(STATE.hist).sort();
+    while (claves.length > 120) { delete STATE.hist[claves.shift()]; }
+    save();
+    return STATE.hist[d];
+  }
+
+  // Dominadas nuevas por día en la ventana pedida. null si no hay historia.
+  function ritmoDominio(dias) {
+    var n = dias || 7;
+    var h = STATE.hist || {};
+    var claves = Object.keys(h).sort();
+    if (claves.length < 3) return null;          // menos de 3 días: sin tendencia
+    var hasta = claves[claves.length - 1];
+    var lim = new Date(hasta); lim.setDate(lim.getDate() - n);
+    var desde = claves.filter(function(k){ return new Date(k) >= lim; })[0] || claves[0];
+    var d = (new Date(hasta) - new Date(desde)) / 86400000;
+    if (d < 1) return null;
+    return {
+      porDia: Math.max(0, (h[hasta].dom - h[desde].dom) / d),
+      dias: Math.round(d),
+      muestras: claves.length
+    };
+  }
+
+  // ─── TRANSFERENCIA ────────────────────────────────────────────────
+  // 58 grupos del banco comparten enunciado y opciones palabra por palabra,
+  // y en 37 de ellos la respuesta correcta CAMBIA porque cambia la imagen.
+  // Eso permite medir algo que ninguna nota de simulacro mide: si sabes la
+  // REGLA o solo has memorizado el texto. Si aciertas un miembro del grupo
+  // y fallas su gemelo, no es despiste: estás respondiendo de memoria.
+
+  function _acertada(id) {
+    var r = STATE.seen[id];
+    return !!r && (r.streak || 0) >= 1;
+  }
+  function _fallada(id) {
+    var r = STATE.seen[id];
+    return !!r && (r.streak || 0) === 0 && (r.w || 0) > 0;
+  }
+
+  function getGrupos() {
+    return (typeof GRUPOS !== 'undefined') ? GRUPOS : [];
+  }
+
+  // Un grupo es INCOHERENTE si has acertado al menos uno y fallado al menos
+  // otro. Es la firma de la memorizacion.
+  function incoherencias(soloTrampa) {
+    return getGrupos().filter(function(g) {
+      if (soloTrampa && !g.trampa) return false;
+      var ok = 0, ko = 0;
+      g.ids.forEach(function(id) {
+        if (_acertada(id)) ok++;
+        else if (_fallada(id)) ko++;
+      });
+      return ok > 0 && ko > 0;
+    });
+  }
+
+  // Indice de transferencia: de los grupos que has TOCADO entero, en cuantos
+  // respondes bien a todos sus miembros. Es el porcentaje de reglas que de
+  // verdad dominas, no de preguntas que recuerdas.
+  function indiceTransferencia() {
+    var tocados = 0, coherentes = 0, sueltas = 0;
+    getGrupos().forEach(function(g) {
+      var vistos = g.ids.filter(function(id){ return !!STATE.seen[id]; });
+      if (vistos.length < 2) { if (vistos.length) sueltas++; return; }
+      tocados++;
+      var todosOk = g.ids.every(function(id){ return !STATE.seen[id] || _acertada(id); });
+      if (todosOk) coherentes++;
+    });
+    return {
+      grupos: getGrupos().length,
+      tocados: tocados,
+      coherentes: coherentes,
+      pct: tocados ? Math.round(coherentes / tocados * 100) : null,
+      aMedias: sueltas,
+      incoherentes: incoherencias(false).length
+    };
+  }
+
+  // Preguntas de los grupos incoherentes, agrupadas y en orden: primero el
+  // grupo entero, despues el siguiente. Verlas seguidas es lo que ensena
+  // que detalle mueve la respuesta.
+  function colaPares(soloTrampa) {
+    var out = [];
+    incoherencias(soloTrampa).forEach(function(g){ out = out.concat(g.ids); });
+    return out;
   }
 
   // ─── Plan diario: marcar bloques hechos ───────────────────────────
@@ -742,6 +926,9 @@ var BRAIN = (function() {
     semanaDeEstudio, recordCheckpoint, getCheckpoints, tocaCheckpoint,
     marcarBloque, bloquesHechos,
     marcarLeyLeida, leyLeida, diasDesdeLey,
+    getGrupos, incoherencias, indiceTransferencia, colaPares,
+    fotoDelDia, ritmoDominio,
+    nivelIdioma, isDominatedBG, destete, colaDestete,
     saveNow, flush: saveNow, statsEscritura,
     interleave: _interleave,
     shuffle: _shuffle, shA: _shA,

@@ -424,6 +424,25 @@ function mod(m) {
     sub = '45 preg • 97 pts • misma estructura cada semana';
     explain = false; exam = true; timed = true; timeLimit = 2400; dryRun = true;
   } else
+  if (m === 'destete') {
+    var _d = BRAIN.colaDestete(ALL, 20);
+    qs = _d.map(function(id){ return ALL_MAP[id]; }).filter(Boolean);
+    if (!qs.length) { toast('Nada pendiente de confirmar en búlgaro'); return; }
+    title = 'Confirmar en búlgaro';
+    sub = qs.length + ' preg · las sabes, ahora sin traducción';
+    explain = true;
+  } else
+  if (m === 'pares') {
+    // OJO: aqui NO se baraja. El valor pedagogico esta en ver el grupo
+    // completo y seguido: es lo que ensena que detalle mueve la respuesta.
+    var _ids = BRAIN.colaPares(false);
+    if (!_ids.length) _ids = [].concat.apply([], BRAIN.getGrupos().filter(function(g){return g.trampa;}).slice(0,6).map(function(g){return g.ids;}));
+    qs = _ids.map(function(id){ return ALL_MAP[id]; }).filter(Boolean);
+    if (!qs.length) { toast('Sin pares pendientes'); return; }
+    title = 'Pares trampa';
+    sub = qs.length + ' preg · grupos seguidos, mismo texto y distinta respuesta';
+    explain = true;
+  } else
   if (typeof m === 'string' && m.indexOf('fam_') === 0) {
     var _fam = AGENTS.familiaPorId(m.slice(4));
     if (!_fam) { toast('Familia no encontrada'); return; }
@@ -592,7 +611,7 @@ function begin(opts) {
   if (TIMER) { clearInterval(TIMER); TIMER=null; }
   S = Object.assign({}, opts, {
     idx:0, score:0, ok:0, ko:0, t0:Date.now(),
-    sel:[], done:false, showES:true, confidence:null,
+    sel:[], done:false, showES:true, confidence:null, pista:false,
     maxS: opts.qs.reduce(function(s,q){return s+(q.p||1);},0),
     dryRun: opts.dryRun||false,  // Examen Seco: sin feedback inmediato
     failedIds: []  // para corrective feedback
@@ -736,7 +755,14 @@ function renderQ() {
   // Explanation (hidden until confirmed)
   var ex=document.createElement('div'); ex.id='expbox'; ex.className='exp-box'; body.appendChild(ex);
 
-  document.getElementById('btn-lang').textContent = S.showES ? 'Solo BG' : 'BG+ES';
+  // DESTETE: el idioma lo decide la pregunta, no un interruptor global.
+  // Nivel 0 -> BG+ES.  Nivel 1 y 2 -> BG, con la traducción a un toque.
+  var _niv = 0;
+  try { _niv = BRAIN.nivelIdioma(q.id); } catch(e) {}
+  S.nivel = _niv;
+  S.pista = false;
+  S.showES = (_niv === 0);
+  _pintarIdioma();
   document.getElementById('btn-ok').disabled = true;
   document.getElementById('btn-ok').style.display = '';
   document.getElementById('btn-nx').style.display = 'none';
@@ -750,6 +776,24 @@ function renderQ() {
     setTimeout(function(){ TTS.autoReadQuestion(q); }, 300);
   }
 }
+
+// ── Presupuesto de tiempo del dia ────────────────────────────────
+// Declarar cuantos minutos tienes cambia QUE bloques entran, no solo el
+// orden. Sin esto, un plan de 70 minutos con 20 disponibles se abandona
+// siempre por el final, que es donde estan velocidad y errores.
+function _presupuestoHoy() {
+  try {
+    var v = JSON.parse(localStorage.getItem('presupuesto') || 'null');
+    if (v && v.d === new Date().toDateString()) return v.m;
+  } catch(e) {}
+  return null;
+}
+function setPresupuesto(m) {
+  if (m) localStorage.setItem('presupuesto', JSON.stringify({d:new Date().toDateString(), m:m}));
+  else localStorage.removeItem('presupuesto');
+  openMisionDia();
+}
+window.setPresupuesto = setPresupuesto;
 
 // ── MODO GUIADO ──────────────────────────────────────────────────
 // El Profesor decide QUE toca hoy. Con el modo guiado activo, los modos
@@ -810,7 +854,7 @@ window.toggleGuiado = toggleGuiado;
 var _modOrig = null;
 function _modGuard(m) {
   var permitidos = _guiadoOn() ? _modosPermitidos() : null;
-  if (permitidos && !permitidos[m] && String(m).indexOf('sec_') !== 0 && String(m).indexOf('fam_') !== 0) {
+  if (permitidos && !permitidos[m] && String(m).indexOf('sec_') !== 0 && String(m).indexOf('fam_') !== 0 && m !== 'pares' && m !== 'destete') {
     var sig = AGENTS.planDia(ALL, VIDS).bloques.filter(function(b){return !b.hecho;})[0];
     if (sig && sig.ley) {
       toast('📖 Antes toca leer la ley de hoy');
@@ -880,6 +924,41 @@ function togglePausaRecup() {
 window.togglePausaRecup = togglePausaRecup;
 
 // ── Modo Confusiones ─────────────────────────────────────────────
+// Pantalla Reglas: la lista de familias con su estado, para practicar la
+// que falle. Es el mismo diagnostico del Profesor, accesible por su cuenta.
+function openReglas() {
+  var c = document.getElementById('reglas-familias');
+  if (c) {
+    var fams = [];
+    try { fams = AGENTS.getFamilias(); } catch(e) {}
+    fams.sort(function(a,b){
+      if (b.falladas !== a.falladas) return b.falladas - a.falladas;
+      return a.pct - b.pct;
+    });
+    var h = '';
+    fams.forEach(function(f){
+      var col = f.falladas >= 2 ? '#ef4444' : f.pct >= 70 ? '#22c55e' : '#eab308';
+      h += '<button onclick="mod(\'fam_'+f.id+'\')" style="display:block;width:100%;text-align:left;'+
+        'background:var(--bg2);border:1px solid var(--bg4);border-radius:8px;'+
+        'padding:10px 12px;margin-bottom:6px;cursor:pointer">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'+
+          '<div style="font-size:12px;font-weight:700;color:var(--fg);flex:1">'+esc(f.t)+'</div>'+
+          '<div style="font-size:12px;font-weight:700;color:'+col+'">'+f.dominadas+'/'+f.total+'</div>'+
+        '</div>'+
+        '<div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;margin:6px 0 4px">'+
+          '<div style="height:100%;width:'+f.pct+'%;background:'+col+'"></div></div>'+
+        '<div style="font-size:11px;color:var(--fg3)">'+
+          (f.falladas ? '\u2717 fallas '+f.falladas+' de '+f.total : 'sin fallos pendientes')+
+          (f.leida ? ' \u00b7 regla le\u00edda' : ' \u00b7 \ud83d\udcd6 regla sin leer')+'</div>'+
+        '</button>';
+    });
+    c.innerHTML = h || '<div class="sett-row"><div class="sett-sub">Todav\u00eda no hay datos. '+
+      'Empieza por Hoy y vuelve cuando el Profesor tenga algo que medir.</div></div>';
+  }
+  show('s-reglas');
+}
+window.openReglas = openReglas;
+
 function openConfusiones() {
   var lista = BRAIN.getConfusiones(2);
   var c = document.getElementById('conf-list');
@@ -965,7 +1044,8 @@ function confA() {
       S._reponer = (S._reponer||[]).concat(q);
     }
   }
-  BRAIN.recordAnswer(q.id,isOK,S.confidence,timeSpent);
+  var _modo = (S.nivel === 0) ? 'es' : (S.pista ? 'pista' : 'bg');
+  BRAIN.recordAnswer(q.id,isOK,S.confidence,timeSpent,_modo);
 
   // Guardar QUE opcion elegiste mal, no solo que fallaste
   var _avisoConf = '';
@@ -974,6 +1054,17 @@ function confA() {
     var _corr = cis.map(function(i){ var a=(q.a||[])[i]; return a?(a.es||a.t||''):''; }).filter(Boolean);
     var _repes = Math.max.apply(null, _eleg.map(function(x){ return BRAIN.vecesElegidaMal(q.id,x); }).concat([0]));
     BRAIN.recordWrongChoice(q.id, _eleg, _corr);
+    // si la pregunta pertenece a un grupo trampa, avisarlo: es lo que
+    // convierte un fallo suelto en una leccion sobre el metodo
+    try {
+      var _gr = BRAIN.getGrupos().filter(function(g){ return g.trampa && g.ids.indexOf(q.id) >= 0; })[0];
+      if (_gr) {
+        _avisoConf += '<div class="exp-b" style="color:#a78bfa;font-weight:700;margin-bottom:6px">' +
+          '\ud83c\udfad Esta pregunta tiene ' + (_gr.ids.length-1) + ' gemela' + (_gr.ids.length>2?'s':'') +
+          ' con el MISMO texto y las MISMAS opciones, pero otra imagen y otra respuesta. ' +
+          'No la memorices: lee la escena.</div>';
+      }
+    } catch(e) {}
     if (_repes >= 1) {
       _avisoConf = '<div class="exp-b" style="color:#f97316;font-weight:700;margin-bottom:6px">' +
         '\u26A0\uFE0F Es la ' + (_repes+1) + '\u00AA vez que eliges esta misma opci\u00F3n. ' +
@@ -1058,9 +1149,10 @@ function endS() {
   var el=Math.round((Date.now()-S.t0)/1000);
   var mm=Math.floor(el/60),ss=el%60;
   BRAIN.recordSession(S.mode,S.idx,el);
+  try { BRAIN.fotoDelDia(ALL); } catch(e) {}
   // marcar el bloque del plan de hoy como hecho
   try {
-    var _mapa = {srs:'srs', confus:'confus', errors:'errores', quick:'velocidad', prueba:'prueba'};
+    var _mapa = {srs:'srs', confus:'confus', errors:'errores', quick:'velocidad', prueba:'prueba', pares:'pares', destete:'destete'};
     if (String(S.mode).indexOf('fam_') === 0) _mapa[S.mode] = 'familia';
     var _b = _mapa[S.mode] || (String(S.mode).indexOf('fase')===0 ? 'nuevas' : null);
     if (_b) BRAIN.marcarBloque(_b);
@@ -1070,6 +1162,7 @@ function endS() {
     try {
       BRAIN.recordCheckpoint({
         forma: BRAIN.semanaDeEstudio(), pts: S.score, max: 97, seg: el,
+        fallos: (S.failedIds||[]),
         estimado: (BRAIN.getSkillEstimate(ALL)||{}).pts
       });
     } catch(e) {}
@@ -1173,14 +1266,41 @@ function retry(){
   if(TIMER){clearInterval(TIMER);TIMER=null;}
   begin(Object.assign({},S,{idx:0,score:0,ok:0,ko:0,t0:Date.now(),qs:BRAIN.shA(BRAIN.shuffle([].concat(S.qs)))}));
 }
-function togLang(){
-  S.showES=!S.showES;
-  var esb=document.getElementById('qesbox');if(esb)esb.style.display=S.showES?'':'none';
-  (S.qs[S.idx]&&S.qs[S.idx].a||[]).forEach(function(a,i){
-    var el=document.getElementById('aes-'+i);if(el)el.style.display=S.showES?'':'none';
+// Aplica el estado de idioma actual a la pantalla.
+function _pintarIdioma() {
+  var esb = document.getElementById('qesbox');
+  if (esb) esb.style.display = S.showES ? '' : 'none';
+  ((S.qs[S.idx] && S.qs[S.idx].a) || []).forEach(function(a, i) {
+    var el = document.getElementById('aes-' + i);
+    if (el) el.style.display = S.showES ? '' : 'none';
   });
-  document.getElementById('btn-lang').textContent=S.showES?'Solo BG':'BG+ES';
+  var b = document.getElementById('btn-lang');
+  if (!b) return;
+  if (S.nivel === 0) {
+    b.textContent = 'BG+ES';
+    b.style.opacity = '.6';
+  } else if (S.showES) {
+    b.textContent = 'ES visible';
+    b.style.opacity = '1';
+  } else {
+    b.textContent = S.nivel === 2 ? '👁 Ver ES' : '👁 Traducción';
+    b.style.opacity = '1';
+  }
 }
+
+// Destapar la traducción en nivel 1 o 2 cuenta como PISTA: rompe la racha
+// en búlgaro. No se penaliza el acierto, se penaliza la dependencia.
+function togLang(){
+  if (S.nivel === 0) { toast('Esta pregunta aún es de aprendizaje: el español va incluido'); return; }
+  if (!S.showES && !S.done) {
+    S.pista = true;
+    toast('Traducción destapada · cuenta como pista');
+  }
+  S.showES = !S.showES;
+  _pintarIdioma();
+}
+window._pintarIdioma = _pintarIdioma;
+
 
 // ── REVISION ──────────────────────────────────
 function openReview(){
@@ -1463,9 +1583,10 @@ window.stopPodcast = function(){
 
 // ── MISIÓN DEL DÍA ────────────────────────────────────────────────
 function openMisionDia() {
+  try { BRAIN.fotoDelDia(ALL); } catch(e) {}
   var panel = document.getElementById('mision-panel');
   if (!panel) { show('home'); return; }
-  var plan = AGENTS.planDia(ALL, VIDS);
+  var plan = AGENTS.planDia(ALL, VIDS, _presupuestoHoy());
   var est  = BRAIN.getSkillEstimate(ALL) || {pts:0,pct:0,base:0,muestraBase:0};
   var cps  = BRAIN.getCheckpoints();
   var hoy  = new Date().toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
@@ -1499,6 +1620,55 @@ function openMisionDia() {
     '</div>'+ (delta?'<div style="font-size:12px;margin-top:6px">'+delta+'</div>':'') +
     '</div>';
 
+  // ── proyeccion: vas a llegar?
+  try {
+    var pr = AGENTS.proyeccion(ALL);
+    if (pr && pr.dias !== null) {
+      var col = {holgado:'#22c55e', justo:'#eab308', no_llegas:'#ef4444', sin_datos:'var(--fg3)'}[pr.veredicto];
+      var titulo = {holgado:'Vas holgado', justo:'Vas justo', no_llegas:'A este ritmo NO llegas',
+                    sin_datos:'Todavía no puedo proyectar'}[pr.veredicto];
+      h += '<div style="background:var(--bg2);border:1px solid '+(pr.veredicto==='no_llegas'?'#ef4444':'var(--bg4)')+
+        ';border-radius:10px;padding:12px 14px;margin-bottom:14px">'+
+        '<div style="font-size:12px;color:var(--fg3)">Camino hasta el examen</div>'+
+        '<div style="font-size:17px;font-weight:800;color:'+col+'">'+titulo+'</div>'+
+        '<div style="font-size:12px;color:var(--fg2);line-height:1.6;margin-top:6px">'+
+          'Te faltan <b>'+pr.pendientes+'</b> por dominar en <b>'+pr.dias+'</b> días: '+
+          '<b>'+pr.necesarioPorDia+' al día</b>.'+
+          (pr.ritmoPorDia !== null
+            ? ' Tu ritmo real de los últimos días es <b>'+pr.ritmoPorDia+'</b>.'
+            : ' Aún no tengo ritmo medido.')+
+        '</div>'+
+        (pr.ptsProyectados !== null
+          ? '<div style="font-size:12px;color:var(--fg2);margin-top:4px">Llegarías con unos <b>'+
+            pr.ptsProyectados+' de 97</b>.</div>' : '')+
+        (!pr.fiable
+          ? '<div style="font-size:11px;color:var(--fg3);margin-top:6px;line-height:1.5">'+
+            'Esta proyección todavía no es fiable: hacen falta al menos 3 días de uso y 3 '+
+            'mediciones semanales. Llevas '+pr.diasDeHistoria+' y '+pr.mediciones+'.</div>' : '')+
+        '</div>';
+    }
+  } catch(e) {}
+
+  // ── cuanto tiempo tengo hoy
+  var presAct = _presupuestoHoy();
+  h += '<div style="margin-bottom:12px">'+
+    '<div style="font-size:12px;color:var(--fg3);margin-bottom:6px">¿Cuánto tiempo tienes hoy?</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  [15,30,45,60].forEach(function(m){
+    var act = presAct === m;
+    h += '<button onclick="setPresupuesto('+m+')" style="flex:1;min-width:56px;padding:8px 4px;'+
+      'border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;'+
+      'background:'+(act?'var(--acc)':'var(--bg2)')+';color:'+(act?'#fff':'var(--fg2)')+';'+
+      'border:1px solid '+(act?'var(--acc)':'var(--bg4)')+'">'+m+' min</button>';
+  });
+  h += '<button onclick="setPresupuesto(0)" style="flex:1;min-width:56px;padding:8px 4px;'+
+    'border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;'+
+    'background:'+(presAct?'var(--bg2)':'var(--acc)')+';color:'+(presAct?'var(--fg2)':'#fff')+';'+
+    'border:1px solid '+(presAct?'var(--bg4)':'var(--acc)')+'">Todo</button>';
+  h += '</div>'+ (plan.fuera ? '<div style="font-size:11px;color:var(--fg3);margin-top:6px">'+
+    plan.fuera+' bloque'+(plan.fuera>1?'s':'')+' no cabe'+(plan.fuera>1?'n':'')+
+    ' en '+presAct+' min. Están abajo, en gris.</div>' : '') + '</div>';
+
   // ── barra de avance del dia
   h += '<div style="font-size:12px;color:var(--fg3);margin-bottom:8px">'+
        plan.hechos+' de '+plan.total+' bloques · '+
@@ -1506,15 +1676,16 @@ function openMisionDia() {
 
   // ── bloques
   plan.bloques.forEach(function(b){
-    var op = b.hecho ? 'opacity:.45;' : '';
+    var op = b.hecho ? 'opacity:.45;' : (b.cabe === false ? 'opacity:.35;' : '');
     h += '<button onclick="'+(b.hecho?'':b.fn)+'" style="display:block;width:100%;text-align:left;'+op+
       'background:var(--bg2);border:1px solid '+(b.hecho?'var(--bg4)':'var(--acc)')+';'+
       'border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">'+
       '<div style="display:flex;gap:10px;align-items:center">'+
-        '<div style="font-size:22px">'+(b.hecho?'✅':b.emoji)+'</div>'+
+        '<div style="font-size:22px">'+(b.hecho?'✅':(b.cabe===false?'⏳':b.emoji))+'</div>'+
         '<div style="flex:1">'+
           '<div style="font-size:14px;font-weight:700;color:var(--fg)">'+b.t+'</div>'+
-          '<div style="font-size:12px;color:var(--acc);font-weight:600">'+b.detalle+' · ~'+b.min+' min</div>'+
+          '<div style="font-size:12px;color:'+(b.cabe===false?'var(--fg3)':'var(--acc)')+';font-weight:600">'+
+            b.detalle+' · ~'+b.min+' min'+(b.cabe===false?' · no cabe hoy':'')+'</div>'+
         '</div></div>'+
       '<div style="font-size:11px;color:var(--fg3);margin-top:6px;line-height:1.5">'+b.porque+'</div>'+
       '</button>';
@@ -1526,6 +1697,43 @@ function openMisionDia() {
       'Has hecho todo lo de hoy. Seguir estudiando ahora rinde poco: el material '+
       'necesita una noche para consolidarse. Vuelve mañana.</div>';
   }
+
+  // ── destete del español: el examen es en búlgaro
+  try {
+    var de = BRAIN.destete(ALL);
+    if (de.vistas > 0) {
+      var colD = de.pctBG >= 80 ? '#22c55e' : de.pctBG >= 40 ? '#eab308' : '#ef4444';
+      h += '<div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;'+
+        'padding:12px 14px;margin-bottom:14px">'+
+        '<div style="font-size:12px;color:var(--fg3)">Destete del español</div>'+
+        '<div style="font-size:24px;font-weight:800;color:'+colD+'">'+de.dominadasBG+
+          ' <span style="font-size:14px;color:var(--fg3)">de '+de.dominadas+' dominadas ya son en búlgaro puro</span></div>'+
+        '<div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;margin:8px 0">'+
+          '<div style="height:100%;width:'+de.pctBG+'%;background:'+colD+'"></div></div>'+
+        '<div style="font-size:11px;color:var(--fg3);line-height:1.5">'+
+        'Nivel de cada pregunta: <b>'+de.nivel0+'</b> con traducción, <b>'+de.nivel1+
+        '</b> en búlgaro con la traducción a un toque, <b>'+de.nivel2+'</b> en búlgaro puro. '+
+        'El examen es entero en búlgaro: lo que cuenta al final es la tercera cifra.</div></div>';
+    }
+  } catch(e) {}
+
+  // ── indice de transferencia: sabes la regla o memorizas?
+  try {
+    var tr = BRAIN.indiceTransferencia();
+    if (tr.tocados > 0) {
+      var colT = tr.pct >= 80 ? '#22c55e' : tr.pct >= 50 ? '#eab308' : '#ef4444';
+      h += '<div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;'+
+        'padding:12px 14px;margin-bottom:14px">'+
+        '<div style="font-size:12px;color:var(--fg3)">Índice de transferencia</div>'+
+        '<div style="font-size:24px;font-weight:800;color:'+colT+'">'+tr.pct+'%'+
+          ' <span style="font-size:12px;color:var(--fg3)">'+tr.coherentes+' de '+tr.tocados+' grupos</span></div>'+
+        '<div style="font-size:11px;color:var(--fg3);line-height:1.5;margin-top:4px">'+
+        'De los grupos de preguntas gemelas que has tocado, en cuántos respondes bien a TODAS. '+
+        'Mide si sabes la regla o si recuerdas el texto.'+
+        (tr.incoherentes ? ' <b style="color:#ef4444">Hay '+tr.incoherentes+' donde aciertas una y fallas otra.</b>' : '')+
+        '</div></div>';
+    }
+  } catch(e) {}
 
   // ── familias de reglas: el diagnostico por regla madre
   var fams = [];

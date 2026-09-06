@@ -276,57 +276,66 @@ window.onerror = function(msg, src, line, col, err) {
    <div class="stat"><div class="stat-n" id="s-str">0</div><div class="stat-l">Racha &#x1F525;</div></div>
   </div>
   <div class="pw2"><div class="pl"><span>Progreso global</span><span id="gpct">0%</span></div><div class="pb"><div class="pbf" id="gbar" style="width:0%"></div></div></div>
-  <div class="sec-lbl">🎯 Plan: 97pts en &lt;20 min</div>
+  <div class="sec-lbl">Tu día</div>
   <div id="guiado-aviso" style="display:none">&#x1F393; <b>Modo guiado activo.</b> Solo est&aacute; abierto lo que toca hoy seg&uacute;n el plan. Lo dem&aacute;s se desbloquea al cerrar el d&iacute;a, o desactiva el modo guiado en Ajustes.</div>
   <div class="grid">
-   <button class="card hi full" onclick="openMisionDia()" style="background:rgba(249,115,22,.08);border-color:var(--acc)"><span class="ci">🗓️</span><span class="ct">Misión de Hoy</span><span class="cd">Qué estudiar exactamente ahora mismo</span></button>
-   <button class="card hi" onclick="mod('fase1')" style="border-color:var(--acc)"><span class="ci">🎯</span><span class="ct">F1: Casi-Seguras</span><span class="cd">8 preg >20% freq • dominar PRIMERO</span></button>
-   <button class="card hi" onclick="mod('fase2')"><span class="ci">🎬</span><span class="ct">F2: Videos Críticos</span><span class="cd">20 videos 3pt • siempre 2 en el examen</span></button>
-   <button class="card hi" onclick="mod('fase3')"><span class="ci">💎</span><span class="ct">F3: Tres Puntos</span><span class="cd">360 preg • 47% de los puntos del examen</span></button>
-   <button class="card" onclick="mod('fase4')"><span class="ci">📚</span><span class="ct">F4: Banco Completo</span><span class="cd">911 preg • cobertura total del banco</span></button>
+   <button class="card hi full" onclick="openMisionDia()" style="background:rgba(249,115,22,.08);border-color:var(--acc)"><span class="ci">&#x1F5D3;&#xFE0F;</span><span class="ct">Hoy</span><span class="cd">El plan del Profesor: qu&eacute; estudiar exactamente ahora</span></button>
+   <button class="card hi full" onclick="openReglas()"><span class="ci">&#x2696;&#xFE0F;</span><span class="ct">Reglas</span><span class="cd">Las leyes y sus casos, y practicar por familia</span></button>
+   <button class="card hi full" onclick="show('s-examen')"><span class="ci">&#x23F1;&#xFE0F;</span><span class="ct">Examen</span><span class="cd">Simulacros y entrenamiento de velocidad</span></button>
+   <button class="card full" onclick="show('s-consulta')"><span class="ci">&#x1F50E;</span><span class="ct">Consulta</span><span class="cd">Banco, buscador, glosario y vocabulario</span></button>
+   <button class="card full" onclick="openAnalytics()"><span class="ci">&#x1F4CA;</span><span class="ct">An&aacute;lisis</span><span class="cd">Nivel, transferencia, familias y mediciones</span></button>
   </div>
-  <div class="sec-lbl">⭐ Simulacros</div>
+  <div style="height:70px"></div>
+ </div>
+</div>
+<div id="s-examen" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div><div class="htitle">&#x23F1;&#xFE0F; Examen</div><div class="hsub">Simulacros y velocidad</div></div></div>
+ <div class="scr">
+  <div class="sec-lbl">Medir</div>
   <div class="grid">
-   <button class="card hi full" onclick="mod('realexam')"><span class="ci">📋</span><span class="ct">Simulacro Real</span><span class="cd">Con feedback • distribución exacta 666 tests КАТ</span></button>
-   <button class="card hi" onclick="mod('examdry')"><span class="ci">🎓</span><span class="ct">Examen Seco</span><span class="cd">Sin feedback • condiciones КАТ reales • cronometrado</span></button>
-   <button class="card hi" onclick="modoVelocidad()"><span class="ci">⚡</span><span class="ct">Modo Velocidad</span><span class="cd">Meta <20s/preg • terminar en <15 min</span></button>
-   <button class="card" onclick="mod('ultimahora')"><span class="ci">🔥</span><span class="ct">Última Hora</span><span class="cd">Top frecuentes no dominadas</span></button>
+   <button class="card hi full" onclick="mod('prueba')"><span class="ci">&#x1F4CF;</span><span class="ct">Prueba patr&oacute;n semanal</span><span class="cd">45 preg &bull; 97 pts &bull; misma estructura cada semana, para comparar</span></button>
+   <button class="card hi" onclick="mod('realexam')"><span class="ci">&#x1F4CB;</span><span class="ct">Simulacro real</span><span class="cd">Con feedback &bull; distribuci&oacute;n del examen</span></button>
+   <button class="card hi" onclick="mod('examdry')"><span class="ci">&#x1F393;</span><span class="ct">Examen seco</span><span class="cd">Sin feedback &bull; condiciones reales</span></button>
   </div>
-  <div class="sec-lbl">🎧 Escuchar</div>
+  <div class="sec-lbl">Entrenar velocidad</div>
   <div class="grid">
-   <button class="card hi" onclick="openPodcast()"><span class="ci">🎧</span><span class="ct">Podcast Bilingüe</span><span class="cd">BG+ES • pregunta, respuesta, explicación • sin tocar pantalla</span></button>
-   <button class="card" onclick="modoNocturno()"><span class="ci">🌙</span><span class="ct">Repaso Nocturno</span><span class="cd">10 preg F1+F2 • 5 min • consolida al dormir</span></button>
+   <button class="card" onclick="modoVelocidad()"><span class="ci">&#x26A1;</span><span class="ct">Modo velocidad</span><span class="cd">Meta por pregunta &bull; terminar en menos de 15 min</span></button>
+   <button class="card" onclick="mod('quick')"><span class="ci">&#x1F680;</span><span class="ct">R&aacute;pido</span><span class="cd">10 preg &bull; 5 min</span></button>
+   <button class="card" onclick="mod('flash')"><span class="ci">&#x26A1;</span><span class="ct">Rel&aacute;mpago</span><span class="cd">5 preg &bull; 2 min</span></button>
+   <button class="card" onclick="mod('ultimahora')"><span class="ci">&#x1F525;</span><span class="ct">&Uacute;ltima hora</span><span class="cd">Las m&aacute;s frecuentes que no dominas</span></button>
   </div>
-  <div class="sec-lbl">📊 Por Frecuencia Real (±1%)</div>
-  <div class="grid"><button class="card full" onclick="openSets()"><span class="ci">📊</span><span class="ct">Sets por Frecuencia</span><span class="cd">8 sets • 10.000 tests analizados • empieza por Set 1</span></button></div>
-  <div class="sec-lbl">🏋️ Entrenamiento</div>
+  <div style="height:70px"></div>
+ </div>
+</div>
+<div id="s-reglas" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div><div class="htitle">&#x2696;&#xFE0F; Reglas</div><div class="hsub">Aprende el principio, no la respuesta</div></div></div>
+ <div class="scr">
+  <div class="sett-row"><div class="sett-sub">Las 1487 preguntas son aplicaciones de unas pocas reglas. Aprende la regla y podr&aacute;s responder cualquier escena, cambie el orden o cambie la foto.</div></div>
   <div class="grid">
-   <button class="card" onclick="mod('srs')"><span class="ci">📅</span><span class="ct">SRS</span><span class="cd">Repetición espaciada • momento óptimo</span></button>
-   <button class="card" onclick="mod('adaptive')"><span class="ci">🧠</span><span class="ct">Adaptativo</span><span class="cd">Interleaving • tus debilidades</span></button>
-   <button class="card" onclick="mod('flash')"><span class="ci">⚡</span><span class="ct">Relámpago</span><span class="cd">5 preg • 2 min</span></button>
-   <button class="card" onclick="mod('corrective')"><span class="ci">🎯</span><span class="ct">Mis Errores</span><span class="cd">Segundo intento en las falladas</span></button>
-   <button class="card" onclick="mod('quick')"><span class="ci">🚀</span><span class="ct">Rápido</span><span class="cd">10 preg • 5 min</span></button>
-   <button class="card" onclick="mod('exam')"><span class="ci">⏱️</span><span class="ct">Oficial</span><span class="cd">45 preg • 40 min</span></button>
+   <button class="card hi full" onclick="openLeyes()"><span class="ci">&#x1F4D6;</span><span class="ct">Leyes y casos</span><span class="cd">Las reglas explicadas, con im&aacute;genes y m&eacute;todo</span></button>
+   <button class="card hi full" onclick="mod('pares')"><span class="ci">&#x1F3AD;</span><span class="ct">Pares trampa</span><span class="cd">Mismo texto y mismas opciones, distinta respuesta</span></button>
+   <button class="card hi" onclick="openConfusiones()"><span class="ci">&#x1F500;</span><span class="ct">Confusiones</span><span class="cd">Lo que fallas siempre igual</span></button>
+   <button class="card hi" onclick="mod('corrective')"><span class="ci">&#x1F3AF;</span><span class="ct">Mis errores</span><span class="cd">Segundo intento en las falladas</span></button>
+   <button class="card" onclick="mod('srs')"><span class="ci">&#x1F4C5;</span><span class="ct">Repaso vencido</span><span class="cd">Lo que toca hoy por repetici&oacute;n espaciada</span></button>
+   <button class="card" onclick="mod('adaptive')"><span class="ci">&#x1F9E0;</span><span class="ct">Adaptativo</span><span class="cd">Interleaving sobre tus debilidades</span></button>
+   <button class="card" onclick="mod('videocrit')"><span class="ci">&#x1F3AC;</span><span class="ct">V&iacute;deos cr&iacute;ticos</span><span class="cd">56 situaciones &bull; siempre caen 2 en el examen</span></button>
+   <button class="card" onclick="mod('multi')"><span class="ci">&#x2705;</span><span class="ct">Multirespuesta</span><span class="cd">Las de varias correctas, donde m&aacute;s se falla</span></button>
   </div>
-  <div class="sec-lbl">📚 Módulos</div>
+  <div class="sec-lbl">Practicar una familia concreta</div>
+  <div class="body" id="reglas-familias"></div>
+  <div style="height:70px"></div>
+ </div>
+</div>
+<div id="s-consulta" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div><div class="htitle">&#x1F50E; Consulta</div><div class="hsub">Sin puntuar, para mirar cosas</div></div></div>
+ <div class="scr">
   <div class="grid">
-   <button class="card" onclick="mod('pts3')"><span class="ci">💎</span><span class="ct">3 Puntos</span><span class="cd">508 preg • máximo valor</span></button>
-   <button class="card" onclick="mod('traps')"><span class="ci">⚠️</span><span class="ct">Trampas</span><span class="cd">222 preg casi idénticas</span></button>
-   <button class="card" onclick="mod('multi')"><span class="ci">✅✅</span><span class="ct">Multirespuesta</span><span class="cd">Varias respuestas correctas</span></button>
-   <button class="card" onclick="modoSeñalesVisual()"><span class="ci">🚦</span><span class="ct">Señales Visuales</span><span class="cd">Imagen → identificar • reconocimiento instantáneo</span></button>
-   <button class="card" onclick="mod('videocrit')"><span class="ci">🎬</span><span class="ct">Videos</span><span class="cd">56 situaciones reales</span></button>
-   <button class="card" onclick="mod('banco')"><span class="ci">📚</span><span class="ct">Banco</span><span class="cd">1487 preguntas</span></button>
-  </div>
-  <div class="sec-lbl">🛠️ Herramientas</div>
-  <div class="grid">
-   <button class="card" onclick="openSearch()"><span class="ci">🔍</span><span class="ct">Buscar</span><span class="cd">Busca cualquier pregunta</span></button>
-   <button class="card" onclick="show('s-sections')"><span class="ci">📚</span><span class="ct">Por Sección</span><span class="cd">R1 a R6 • elige la débil</span></button>
-   <button class="card" onclick="openFlash()"><span class="ci">🃏</span><span class="ct">Flashcards</span><span class="cd">Vocabulario BG-ES</span></button>
-   <button class="card" onclick="openGlos()"><span class="ci">🔎</span><span class="ct">Glosario</span><span class="cd">Términos técnicos</span></button>
-   <button class="card" onclick="openConfusiones()"><span class="ci">&#x1F500;</span><span class="ct">Confusiones</span><span class="cd">Lo que fallas siempre igual</span></button>
-   <button class="card" onclick="openLeyes()"><span class="ci">⚖️</span><span class="ct">Leyes</span><span class="cd">Prioridad y casos • con audio</span></button>
-   <button class="card" onclick="openAnalytics()"><span class="ci">📊</span><span class="ct">Análisis</span><span class="cd">4 agentes • superlearning</span></button>
-   <button class="card" onclick="openProg()"><span class="ci">🏆</span><span class="ct">Progreso</span><span class="cd">Stats, calendario y logros</span></button>
+   <button class="card hi full" onclick="openSearch()"><span class="ci">&#x1F50D;</span><span class="ct">Buscar</span><span class="cd">Cualquier pregunta por texto</span></button>
+   <button class="card" onclick="mod('banco')"><span class="ci">&#x1F4DA;</span><span class="ct">Banco completo</span><span class="cd">Las 1487 preguntas</span></button>
+   <button class="card" onclick="openGlos()"><span class="ci">&#x1F4D6;</span><span class="ct">Glosario</span><span class="cd">Abreviaturas y t&eacute;rminos</span></button>
+   <button class="card" onclick="openFlash()"><span class="ci">&#x1F0CF;</span><span class="ct">Flashcards</span><span class="cd">Vocabulario BG-ES</span></button>
+   <button class="card" onclick="openPodcast()"><span class="ci">&#x1F3A7;</span><span class="ct">Podcast biling&uuml;e</span><span class="cd">Escuchar sin tocar la pantalla</span></button>
+   <button class="card" onclick="openProg()"><span class="ci">&#x1F3C6;</span><span class="ct">Progreso</span><span class="cd">Calendario, rachas y logros</span></button>
   </div>
   <div style="height:70px"></div>
  </div>
