@@ -41,7 +41,7 @@ var BRAIN = (function() {
   function defaultState() {
     return {
       seen: {}, err: {}, conf: {}, vocab: {}, wrong: {},
-      firstTry: {ok:0, total:0}, checkpoints: [], plan: {}, leidas: {}, hist: {},
+      firstTry: {ok:0, total:0}, checkpoints: [], plan: {}, leidas: {}, hist: {}, lex: {},
       unknownWords: [], exams: [], sessions: [],
       cal: {}, streak: 0, lastDay: null,
       achievements: {}, sp: {}, fcDone: {},
@@ -164,6 +164,7 @@ var BRAIN = (function() {
     // porque acertar mirando no demuestra nada sobre el examen.
     if (modo) {
       r.modo = modo;
+      if (modo === 'es') { if (ok) r.esOk = (r.esOk || 0) + 1; }
       if (modo === 'bg') {
         if (ok) { r.bg = (r.bg || 0) + 1; r.bgStreak = (r.bgStreak || 0) + 1; }
         else r.bgStreak = 0;
@@ -531,6 +532,78 @@ var BRAIN = (function() {
     return Math.floor((Date.now() - ts) / 86400000);
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // ETAPA A · LÉXICO
+  // ═══════════════════════════════════════════════════════════════
+  // El examen es en búlgaro y hay que leerlo a una palabra por segundo.
+  // A esa velocidad no se lee: se RECONOCE. Y reconocer no es acertar,
+  // es acertar SIN PENSAR. Por eso aquí no basta con responder bien:
+  // hay que responder por debajo del umbral de automaticidad.
+  var LEX_MS = 2000;          // 2 s: por encima, aún estás traduciendo
+  var LEX_RACHA = 3;          // 3 aciertos rápidos seguidos = automatizado
+
+  function _lex(clave) {
+    if (!STATE.lex) STATE.lex = {};
+    if (!STATE.lex[clave]) STATE.lex[clave] = { ok:0, ko:0, racha:0, ms:[], due: new Date().toDateString(), iv:1 };
+    return STATE.lex[clave];
+  }
+
+  // ok: acertó.  ms: milisegundos que tardó.  dir: 'bg2es' o 'es2bg'.
+  function recordLex(clave, ok, ms, dir) {
+    var r = _lex(clave);
+    var rapido = ok && ms > 0 && ms <= LEX_MS;
+    if (ok) { r.ok++; r.racha = rapido ? (r.racha || 0) + 1 : 0; }
+    else    { r.ko++; r.racha = 0; }
+    if (ms > 0) r.ms = (r.ms || []).concat(ms).slice(-8);
+    r.dir = dir || r.dir;
+    // el espaciado del léxico es más corto que el de las preguntas:
+    // una palabra que no se usa se pierde en días, no en semanas
+    var iv = r.racha >= LEX_RACHA ? 7 : r.racha === 2 ? 3 : r.racha === 1 ? 1 : 0;
+    r.iv = iv;
+    var d = new Date(); d.setDate(d.getDate() + iv);
+    r.due = d.toDateString();
+    save();
+    return { rapido: rapido, racha: r.racha, automatizado: automatizado(clave) };
+  }
+
+  // Automatizado = 3 aciertos seguidos por debajo de 2 s. No es saberlo:
+  // es no tener que pensarlo.
+  function automatizado(clave) {
+    var r = (STATE.lex || {})[clave];
+    return !!r && (r.racha || 0) >= LEX_RACHA;
+  }
+
+  function msMedio(clave) {
+    var r = (STATE.lex || {})[clave];
+    if (!r || !r.ms || !r.ms.length) return null;
+    return Math.round(r.ms.reduce(function(a,b){return a+b;}, 0) / r.ms.length);
+  }
+
+  // Cola del léxico: primero lo vencido, después lo nunca visto.
+  function colaLex(claves, limite) {
+    var hoy = new Date(), pend = [], nuevas = [];
+    (claves || []).forEach(function(k) {
+      var r = (STATE.lex || {})[k];
+      if (!r) { nuevas.push(k); return; }
+      if (automatizado(k) && new Date(r.due) > hoy) return;   // ya rueda
+      if (new Date(r.due) <= hoy) pend.push(k);
+    });
+    return pend.concat(nuevas).slice(0, limite || 20);
+  }
+
+  function estadoLex(claves) {
+    var n = (claves || []).length, auto = 0, vistas = 0, lentas = 0;
+    (claves || []).forEach(function(k) {
+      var r = (STATE.lex || {})[k];
+      if (!r) return;
+      vistas++;
+      if (automatizado(k)) auto++;
+      else if ((msMedio(k) || 0) > LEX_MS) lentas++;
+    });
+    return { total: n, vistas: vistas, automatizadas: auto, lentas: lentas,
+             pct: n ? Math.round(auto / n * 100) : 0, umbralMs: LEX_MS };
+  }
+
   // ─── NIVEL DE IDIOMA POR PREGUNTA ─────────────────────────────────
   // El destete es por pregunta, no global. Cada una sube sola cuando
   // demuestras que ya no necesitas la muleta en ESA pregunta.
@@ -544,7 +617,10 @@ var BRAIN = (function() {
     var r = STATE.seen[id];
     if (!r) return 0;
     if ((r.bgStreak || 0) >= SUBE_A_2) return 2;
-    if ((r.c || 0) >= SUBE_A_1) return 1;
+    // OJO: hace falta evidencia del sistema NUEVO. Usar r.c haria que todo
+    // el progreso anterior saltase a nivel 1 sin haber pasado nunca por la
+    // fase bilingue, que es justo lo que hay que evitar.
+    if ((r.esOk || 0) >= SUBE_A_1) return 1;
     return 0;
   }
 
@@ -929,6 +1005,7 @@ var BRAIN = (function() {
     getGrupos, incoherencias, indiceTransferencia, colaPares,
     fotoDelDia, ritmoDominio,
     nivelIdioma, isDominatedBG, destete, colaDestete,
+    recordLex, automatizado, msMedio, colaLex, estadoLex,
     saveNow, flush: saveNow, statsEscritura,
     interleave: _interleave,
     shuffle: _shuffle, shA: _shA,

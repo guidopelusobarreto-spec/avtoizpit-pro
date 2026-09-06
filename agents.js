@@ -354,6 +354,46 @@ var AGENTS = (function() {
              motivo: 'cobertura' };
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // ETAPA A · aprender a LEER antes de practicar
+  // ═══════════════════════════════════════════════════════════════
+  function _clavesLex() {
+    var k = [];
+    if (typeof LEX_PARES !== 'undefined')
+      LEX_PARES.forEach(function(p){ k.push(p.bg); if (p.op) k.push(p.op.bg); });
+    if (typeof LEX_BLOQUES !== 'undefined')
+      LEX_BLOQUES.forEach(function(b){ k.push(b.bg); });
+    if (typeof LEX_GRAM !== 'undefined')
+      LEX_GRAM.forEach(function(g){ k.push(g.bg); });
+    if (typeof LEX_PALABRAS !== 'undefined')
+      LEX_PALABRAS.forEach(function(w){ k.push(w.bg); });
+    // sin duplicados: una palabra que aparezca en dos pares saldría dos
+    // veces en la cola y falsearía el recuento
+    var visto = {};
+    return k.filter(function(x){ if (visto[x]) return false; visto[x] = 1; return true; });
+  }
+
+  // Se sale de la Etapa A por RENDIMIENTO, no por tiempo: hay que reconocer
+  // las decisivas y la mayoría de los bloques por debajo de 2 segundos.
+  function etapaA() {
+    var claves = _clavesLex();
+    if (!claves.length) return { activa: false };
+    var dec = [];
+    if (typeof LEX_PARES !== 'undefined')
+      LEX_PARES.forEach(function(p){ dec.push(p.bg); if (p.op) dec.push(p.op.bg); });
+    var eD = BRAIN.estadoLex(dec), eT = BRAIN.estadoLex(claves);
+    var superada = eD.pct >= 100 && eT.pct >= 70;
+    return {
+      activa: !superada, superada: superada,
+      decisivas: eD, todo: eT, claves: claves,
+      pendientes: BRAIN.colaLex(claves, 999).length
+    };
+  }
+
+  // OJO: no vale (x.prio||5). En JS el 0 es falso, así que un bloque con
+  // prioridad 0 — el máximo — caería al valor por defecto y perdería.
+  function _n(v) { return (v === undefined || v === null) ? 5 : v; }
+
   function planDia(all, vids, presupuesto) {
     var s = BRAIN.get();
     var m = BRAIN.getMetrics();
@@ -368,6 +408,20 @@ var AGENTS = (function() {
     }).length;
 
     var b = [];
+
+    // ETAPA A: mientras no sepas leer el búlgaro del examen, es lo único
+    // que tiene sentido hacer. Practicar preguntas antes es memorizar la
+    // forma del texto en vez de entenderlo.
+    var eA = etapaA();
+    if (eA.activa) {
+      var pendLex = Math.min(24, Math.max(8, eA.pendientes));
+      b.push({ prio:0, orden:0, id:'lex', emoji:'🔤', escalable:1, n:pendLex,
+        t:'Aprender a leer el examen',
+        detalle: eA.decisivas.automatizadas + '/' + eA.decisivas.total + ' palabras decisivas · ' +
+                 eA.todo.automatizadas + '/' + eA.todo.total + ' en total',
+        porque:'El examen es entero en búlgaro y hay que leerlo a una palabra por segundo. A esa velocidad no se lee, se reconoce. Primero las palabras que invierten la respuesta, después los bloques que más se repiten. Se sale de aquí reconociéndolos en menos de 2 segundos, no por tiempo.',
+        min: Math.max(6, Math.round(pendLex * 0.5)), fn:"mod('lex')" });
+    }
 
     // La lectura va PRIMERA: la regla antes que la práctica.
     var ley = leyDeHoy();
@@ -466,7 +520,7 @@ var AGENTS = (function() {
     var pres = presupuesto || null;
     if (pres) {
       var acum = 0;
-      b.slice().sort(function(x,y){ return (x.prio||5) - (y.prio||5); })
+      b.slice().sort(function(x,y){ return _n(x.prio) - _n(y.prio); })
        .forEach(function(x){
          if (x.hecho) { x.cabe = true; return; }
          if (acum + x.min <= pres) { x.cabe = true; acum += x.min; return; }
@@ -492,7 +546,7 @@ var AGENTS = (function() {
     }
     b.sort(function(x,y){
       if (!!x.cabe !== !!y.cabe) return x.cabe ? -1 : 1;   // lo que no cabe, al final
-      return (x.orden||5) - (y.orden||5);
+      return _n(x.orden) - _n(y.orden);
     });
 
     return {
@@ -846,7 +900,7 @@ var AGENTS = (function() {
   }
 
   return {
-    planDia, buildPrueba, leyDeHoy, proyeccion,
+    planDia, buildPrueba, leyDeHoy, proyeccion, etapaA, clavesLex: _clavesLex,
     getFamilias, familiasDebiles, familiaPorId, fraseFamilia,
     runCoach, getSRSQueue, buildFase1,
     buildRealExam, buildAdaptive, buildUltimaHora,

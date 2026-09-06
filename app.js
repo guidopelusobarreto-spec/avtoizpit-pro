@@ -424,6 +424,7 @@ function mod(m) {
     sub = '45 preg • 97 pts • misma estructura cada semana';
     explain = false; exam = true; timed = true; timeLimit = 2400; dryRun = true;
   } else
+  if (m === 'lex') { openLex(); return; }
   if (m === 'destete') {
     var _d = BRAIN.colaDestete(ALL, 20);
     qs = _d.map(function(id){ return ALL_MAP[id]; }).filter(Boolean);
@@ -777,6 +778,133 @@ function renderQ() {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ETAPA A · entrenamiento de lectura
+// ══════════════════════════════════════════════════════════════════
+// No es un test de vocabulario: es un entrenamiento de VELOCIDAD. Se
+// cronometra cada tarjeta y solo cuenta lo que reconoces por debajo de
+// 2 segundos. Alterna reconocer (BG->ES) y producir (ES->BG), que cuesta
+// mas y fija mejor.
+var _LEX = null;
+
+function _lexPorClave(k) {
+  var r = null;
+  if (typeof LEX_PARES !== 'undefined') LEX_PARES.forEach(function(p){
+    if (p.bg === k) r = {bg:p.bg, es:p.es, nota:p.nota, ej:p.ej, op:p.op};
+    if (p.op && p.op.bg === k) r = {bg:p.op.bg, es:p.op.es, nota:p.nota, ej:p.op.ej,
+                                    op:{bg:p.bg, es:p.es}};
+  });
+  if (!r && typeof LEX_BLOQUES !== 'undefined') LEX_BLOQUES.forEach(function(b){
+    if (b.bg === k) r = {bg:b.bg, es:b.es, ej:b.ej};
+  });
+  if (!r && typeof LEX_GRAM !== 'undefined') LEX_GRAM.forEach(function(g){
+    if (g.bg === k) r = {bg:g.bg, es:g.es, nota:g.nota, ej:g.ej, gram:1};
+  });
+  if (!r && typeof LEX_PALABRAS !== 'undefined') LEX_PALABRAS.forEach(function(w){
+    if (w.bg === k) r = {bg:w.bg, es:w.es, ej:w.ej};
+  });
+  return r;
+}
+
+function mostrarLex() {
+  var c = document.getElementById('lex-body');
+  if (!c) return;
+  if (_LEX.i >= _LEX.cola.length) return _finLex();
+  var k = _LEX.cola[_LEX.i];
+  var e = _lexPorClave(k);
+  if (!e) { _LEX.i++; return mostrarLex(); }
+  _LEX.actual = e;
+  // alternar reconocer y producir
+  // La gramática solo se pregunta de búlgaro a español: producir «да» o
+  // «се» a partir de su glosa no enseña nada, esas palabras se reconocen
+  // dentro de la frase, no se recitan.
+  _LEX.dir = (e.gram) ? 'bg2es' : ((_LEX.i % 3 === 2) ? 'es2bg' : 'bg2es');
+  var pregunta = _LEX.dir === 'bg2es' ? e.bg : e.es;
+  var etiqueta = _LEX.dir === 'bg2es' ? 'Qué significa' : 'Cómo se dice en búlgaro';
+  _LEX.t0 = Date.now();
+  c.innerHTML =
+    '<div style="text-align:center;padding:24px 8px">'+
+      '<div style="font-size:12px;color:var(--fg3);margin-bottom:14px">'+etiqueta+
+        ' &nbsp;·&nbsp; '+(_LEX.i+1)+' de '+_LEX.cola.length+'</div>'+
+      '<div style="font-size:30px;font-weight:800;color:var(--fg);line-height:1.3;'+
+        'margin-bottom:22px;word-break:break-word">'+esc(pregunta)+'</div>'+
+      '<button class="rbtn p" style="width:100%;max-width:320px" onclick="revelarLex()">Ver respuesta</button>'+
+      '<div style="font-size:11px;color:var(--fg3);margin-top:14px;line-height:1.5">'+
+        'Responde mentalmente ANTES de destapar. Solo cuenta si lo reconoces '+
+        'en menos de 2 segundos.</div>'+
+    '</div>';
+}
+window.mostrarLex = mostrarLex;
+
+function revelarLex() {
+  var ms = Date.now() - _LEX.t0;
+  var e = _LEX.actual;
+  var c = document.getElementById('lex-body');
+  var resp = _LEX.dir === 'bg2es' ? e.es : e.bg;
+  var col = ms <= 2000 ? '#22c55e' : ms <= 4000 ? '#eab308' : '#ef4444';
+  _LEX.ms = ms;
+  c.innerHTML =
+    '<div style="text-align:center;padding:20px 8px">'+
+      '<div style="font-size:26px;font-weight:800;color:var(--acc);margin-bottom:6px;'+
+        'word-break:break-word">'+esc(resp)+'</div>'+
+      '<div style="font-size:13px;color:'+col+';font-weight:700;margin-bottom:16px">'+
+        (ms/1000).toFixed(1)+' s'+(ms<=2000?' · automático':' · aún estás traduciendo')+'</div>'+
+      (e.op ? '<div style="background:rgba(239,68,68,.10);border:1px solid #ef4444;border-radius:8px;'+
+        'padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--fg2)">'+
+        'No lo confundas con <b>'+esc(e.op.bg)+'</b> = '+esc(e.op.es)+'</div>' : '')+
+      (e.nota ? '<div class="exp-b" style="text-align:left;font-size:12px;color:var(--fg3);'+
+        'margin-bottom:12px">'+esc(e.nota)+'</div>' : '')+
+      (e.ej ? '<div style="background:var(--bg2);border-radius:8px;padding:10px 12px;'+
+        'margin-bottom:16px;text-align:left">'+
+        '<div style="font-size:11px;color:var(--fg3);margin-bottom:4px">En el banco:</div>'+
+        '<div style="font-size:13px;color:var(--fg)">'+esc(e.ej.bg)+'</div>'+
+        '<div style="font-size:12px;color:var(--acc)">'+esc(e.ej.es)+'</div></div>' : '')+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="rbtn" style="flex:1;background:#7f1d1d;color:#fff" onclick="calificarLex(0)">No lo sabía</button>'+
+        '<button class="rbtn p" style="flex:1" onclick="calificarLex(1)">Lo sabía</button>'+
+      '</div>'+
+    '</div>';
+}
+window.revelarLex = revelarLex;
+
+function calificarLex(ok) {
+  var res = BRAIN.recordLex(_LEX.actual.bg, !!ok, _LEX.ms, _LEX.dir);
+  if (ok && res.rapido) _LEX.rapidas++;
+  if (ok) _LEX.ok++;
+  _LEX.i++;
+  mostrarLex();
+}
+window.calificarLex = calificarLex;
+
+function _finLex() {
+  BRAIN.marcarBloque('lex');
+  var e = AGENTS.etapaA();
+  var c = document.getElementById('lex-body');
+  c.innerHTML = '<div style="padding:22px 12px;text-align:center">'+
+    '<div style="font-size:20px;font-weight:800;color:var(--fg);margin-bottom:10px">Sesión terminada</div>'+
+    '<div style="font-size:14px;color:var(--fg2);margin-bottom:16px">'+
+      _LEX.rapidas+' de '+_LEX.cola.length+' reconocidas en menos de 2 segundos</div>'+
+    '<div style="background:var(--bg2);border-radius:10px;padding:12px 14px;text-align:left;'+
+      'font-size:12px;color:var(--fg3);line-height:1.6;margin-bottom:16px">'+
+      'Palabras decisivas automatizadas: <b>'+e.decisivas.automatizadas+' de '+e.decisivas.total+'</b><br>'+
+      'Léxico total: <b>'+e.todo.automatizadas+' de '+e.todo.total+'</b><br>'+
+      (e.superada
+        ? 'Ya puedes leer el examen. La Etapa A está superada.'
+        : 'Para pasar a las preguntas: todas las decisivas y el 70% del resto.')+
+    '</div>'+
+    '<button class="rbtn p" style="width:100%" onclick="show(\'home\')">Volver</button></div>';
+}
+
+function openLex() {
+  var claves = AGENTS.clavesLex();
+  var cola = BRAIN.colaLex(claves, 24);
+  if (!cola.length) { toast('Nada pendiente en el léxico por hoy'); return; }
+  _LEX = { cola: cola, i: 0, ok: 0, rapidas: 0, t0: 0, ms: 0 };
+  show('s-lex');
+  mostrarLex();
+}
+window.openLex = openLex;
+
 // ── Presupuesto de tiempo del dia ────────────────────────────────
 // Declarar cuantos minutos tienes cambia QUE bloques entran, no solo el
 // orden. Sin esto, un plan de 70 minutos con 20 disponibles se abandona
@@ -854,7 +982,7 @@ window.toggleGuiado = toggleGuiado;
 var _modOrig = null;
 function _modGuard(m) {
   var permitidos = _guiadoOn() ? _modosPermitidos() : null;
-  if (permitidos && !permitidos[m] && String(m).indexOf('sec_') !== 0 && String(m).indexOf('fam_') !== 0 && m !== 'pares' && m !== 'destete') {
+  if (permitidos && !permitidos[m] && String(m).indexOf('sec_') !== 0 && String(m).indexOf('fam_') !== 0 && m !== 'pares' && m !== 'destete' && m !== 'lex') {
     var sig = AGENTS.planDia(ALL, VIDS).bloques.filter(function(b){return !b.hecho;})[0];
     if (sig && sig.ley) {
       toast('📖 Antes toca leer la ley de hoy');
@@ -1851,18 +1979,57 @@ function leerLey(tipo, i) {
   var t = L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt +
           (L.im ? ' ' + L.im.map(function(x){ return 'Pregunta ' + x.q + '. ' + x.a; }).join(' ') : '') +
           ' Clave: ' + L.cl;
-  if (window.speakES) window.speakES(_leyLimpio(t));
+  _leerCola([_leyLimpio(t)]);
 }
 function leerTodo(tipo) {
   var arr = (tipo === 'casos' ? CASOS : LEYES);
-  var t = arr.map(function(L) {
-    return L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt +
-           (L.im ? ' ' + L.im.map(function(x){ return 'Pregunta ' + x.q + '. ' + x.a; }).join(' ') : '') +
-           ' Clave: ' + L.cl;
-  }).join(' Siguiente. ');
-  if (window.speakES) window.speakES(_leyLimpio(t));
+  // El sintetizador del navegador se queda mudo con textos largos. Los 24
+  // casos juntos pasan de 40.000 caracteres, muy por encima de lo que
+  // aguanta. Se trocea en fragmentos y se encadenan.
+  var trozos = [];
+  arr.forEach(function(L) {
+    var t = L.t + '. ' + (L.art ? L.art + '. ' : '') + L.txt +
+      (L.im ? ' ' + L.im.map(function(x){ return 'Pregunta ' + x.q + '. ' + x.a; }).join(' ') : '') +
+      ' Clave: ' + (L.cl || '');
+    t = _leyLimpio(t);
+    while (t.length > 700) {
+      var corte = t.lastIndexOf('. ', 700);
+      if (corte < 200) corte = 700;
+      trozos.push(t.slice(0, corte + 1));
+      t = t.slice(corte + 1);
+    }
+    if (t.trim()) trozos.push(t);
+    trozos.push('Siguiente.');
+  });
+  _leerCola(trozos);
 }
-function pararLey() { if (window.speechSynthesis) window.speechSynthesis.cancel(); }
+
+// Encadena fragmentos y se puede cortar en cualquier momento.
+var _colaTTS = null;
+function _leerCola(trozos) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  _colaTTS = trozos.slice();
+  _pintarBotonParar(true);
+  (function siguiente() {
+    if (!_colaTTS || !_colaTTS.length) { _colaTTS = null; _pintarBotonParar(false); return; }
+    var u = new SpeechSynthesisUtterance(_colaTTS.shift());
+    u.lang = 'es-ES'; u.rate = parseFloat(localStorage.getItem('tts_rate') || '1');
+    u.onend = siguiente;
+    u.onerror = siguiente;
+    window.speechSynthesis.speak(u);
+  })();
+}
+function _pintarBotonParar(on) {
+  var b = document.getElementById('btn-parar-tts');
+  if (b) b.style.display = on ? '' : 'none';
+}
+function pararLey() {
+  _colaTTS = null;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  _pintarBotonParar(false);
+}
+window.pararLey = pararLey;
 function verLeyes(tipo) {
   _leyVista = tipo;
   var arr = (tipo === 'casos' ? CASOS : LEYES);

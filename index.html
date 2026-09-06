@@ -288,6 +288,10 @@ window.onerror = function(msg, src, line, col, err) {
   <div style="height:70px"></div>
  </div>
 </div>
+<div id="s-lex" class="screen">
+ <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div><div class="htitle">&#x1F524; Aprender a leer</div><div class="hsub">Reconocer, no traducir</div></div></div>
+ <div class="scr"><div id="lex-body"></div></div>
+</div>
 <div id="s-examen" class="screen">
  <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div><div class="htitle">&#x23F1;&#xFE0F; Examen</div><div class="hsub">Simulacros y velocidad</div></div></div>
  <div class="scr">
@@ -312,6 +316,7 @@ window.onerror = function(msg, src, line, col, err) {
  <div class="scr">
   <div class="sett-row"><div class="sett-sub">Las 1487 preguntas son aplicaciones de unas pocas reglas. Aprende la regla y podr&aacute;s responder cualquier escena, cambie el orden o cambie la foto.</div></div>
   <div class="grid">
+   <button class="card hi full" onclick="openLex()" style="border-color:var(--acc)"><span class="ci">&#x1F524;</span><span class="ct">Aprender a leer</span><span class="cd">El b&uacute;lgaro que necesitas para el examen</span></button>
    <button class="card hi full" onclick="openLeyes()"><span class="ci">&#x1F4D6;</span><span class="ct">Leyes y casos</span><span class="cd">Las reglas explicadas, con im&aacute;genes y m&eacute;todo</span></button>
    <button class="card hi full" onclick="mod('pares')"><span class="ci">&#x1F3AD;</span><span class="ct">Pares trampa</span><span class="cd">Mismo texto y mismas opciones, distinta respuesta</span></button>
    <button class="card hi" onclick="openConfusiones()"><span class="ci">&#x1F500;</span><span class="ct">Confusiones</span><span class="cd">Lo que fallas siempre igual</span></button>
@@ -536,7 +541,8 @@ window.onerror = function(msg, src, line, col, err) {
 </div>
 
 <div id="s-leyes" class="screen">
- <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">⚖️ Leyes de prioridad</div></div>
+ <div class="hdr"><button class="back" onclick="show('home')">←</button><div class="htitle">⚖️ Leyes de prioridad</div>
+  <button id="btn-parar-tts" onclick="pararLey()" style="display:none;position:fixed;bottom:78px;left:50%;transform:translateX(-50%);z-index:60;padding:10px 18px;border-radius:20px;background:#7f1d1d;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer">&#9209;&#65039; Detener lectura</button></div>
  <div class="tb" style="border-bottom:1px solid var(--bg4);border-top:none">
   <button id="ley-t1" class="btn-ok" style="flex:1" onclick="verLeyes('leyes')">Reglas</button>
   <button id="ley-t2" class="btn-lang" style="flex:1" onclick="verLeyes('casos')">Casos</button>
@@ -679,7 +685,8 @@ window.onerror = function(msg, src, line, col, err) {
 
 <!-- ═══ DATOS ═══════════════════════════════════════════════════ -->
 <script src="data-ranked.js"></script>
-<script src="data-leyes.js"></script>
+<script src="data-leyes.js">
+<script src="data-lex.js?v=1"></script></script>
 <script src="data-traps.js"></script>
 <script src="data-pts3.js"></script>
 <script src="data-multi.js"></script>
