@@ -896,9 +896,20 @@ function _finLex() {
 }
 
 function openLex() {
+  // Si el fichero de datos no ha cargado, hay que decirlo con claridad en
+  // vez de fingir que no queda nada: son dos situaciones muy distintas y
+  // el aviso genérico costó una sesión entera de diagnóstico.
+  if (typeof LEX_PARES === 'undefined' || typeof LEX_BLOQUES === 'undefined') {
+    toast('Falta data-lex.js: súbelo junto a los demás ficheros');
+    return;
+  }
   var claves = AGENTS.clavesLex();
+  if (!claves.length) { toast('El léxico está vacío: revisa data-lex.js'); return; }
   var cola = BRAIN.colaLex(claves, 24);
-  if (!cola.length) { toast('Nada pendiente en el léxico por hoy'); return; }
+  if (!cola.length) {
+    toast('Léxico al día: vuelve mañana o repasa desde Reglas');
+    return;
+  }
   _LEX = { cola: cola, i: 0, ok: 0, rapidas: 0, t0: 0, ms: 0 };
   show('s-lex');
   mostrarLex();
