@@ -35,7 +35,7 @@ function loadImg(el, id) {
       this.onerror = null;
       this.style.display = '';
       this.alt = '🖼️ Imagen no disponible (ID: ' + id + ')';
-      this.style.cssText += ';min-height:60px;display:flex;align-items:center;justify-content:center;background:var(--bg3);color:var(--fg3);font-size:11px;text-align:center;border:1px dashed var(--bg4)';
+      this.style.cssText += ';min-height:60px;display:flex;align-items:center;justify-content:center;background:var(--bg3);color:var(--fg3);font-size:0.62rem;text-align:center;border:1px dashed var(--bg4)';
     }
   };
 }
@@ -202,8 +202,8 @@ function setSpeed(s) {
 }
 
 // ── Tamano de letra (presbicia) ───────────────
-var FS_VALS   = [1, 1.15, 1.3, 1.45];
-var FS_NOMBRES = ['Normal', 'Grande', 'Muy grande', 'Maximo'];
+var FS_VALS   = [1, 1.15, 1.3, 1.45, 1.6];
+var FS_NOMBRES = ['Normal', 'Grande', 'Muy grande', 'Máximo', 'Enorme'];
 function fsNombre(v) {
   for (var i = 0; i < FS_VALS.length; i++) if (Math.abs(FS_VALS[i] - v) < 0.001) return FS_NOMBRES[i];
   return 'Normal';
@@ -634,6 +634,15 @@ window.avisoPuerta = avisoPuerta;
 function begin(opts) {
   if (_puertaCerrada()) { avisoPuerta(); return; }
   if (TIMER) { clearInterval(TIMER); TIMER=null; }
+  // BARAJAR SIEMPRE LAS OPCIONES. En el fichero del banco la respuesta
+  // correcta está la PRIMERA en 800 de las 881 preguntas de respuesta
+  // única: es un artefacto de cómo se extrajo, no del examen. Si un modo
+  // se olvida de barajar, se entrena el reflejo «la de arriba» y en el
+  // examen real, que las reordena, ese reflejo vale cero. Se hace aquí,
+  // en el único sitio por el que pasan todos los modos, y no en cada uno.
+  if (opts && opts.qs && opts.qs.length) {
+    try { opts.qs = BRAIN.shA(opts.qs); } catch (e) {}
+  }
   S = Object.assign({}, opts, {
     idx:0, score:0, ok:0, ko:0, t0:Date.now(),
     sel:[], done:false, showES:true, confidence:null, pista:false,
@@ -856,12 +865,12 @@ function mostrarLex() {
   _LEX.t0 = Date.now();
   c.innerHTML =
     '<div style="text-align:center;padding:24px 8px">'+
-      '<div style="font-size:12px;color:var(--fg3);margin-bottom:14px">'+etiqueta+
+      '<div style="font-size:0.68rem;color:var(--fg3);margin-bottom:14px">'+etiqueta+
         ' &nbsp;·&nbsp; '+(_LEX.i+1)+' de '+_LEX.cola.length+'</div>'+
-      '<div style="font-size:30px;font-weight:800;color:var(--fg);line-height:1.3;'+
+      '<div style="font-size:1.55rem;font-weight:800;color:var(--fg);line-height:1.3;'+
         'margin-bottom:22px;word-break:break-word">'+esc(pregunta)+'</div>'+
       '<button class="rbtn p" style="width:100%;max-width:320px" onclick="revelarLex()">Ver respuesta</button>'+
-      '<div style="font-size:11px;color:var(--fg3);margin-top:14px;line-height:1.5">'+
+      '<div style="font-size:0.62rem;color:var(--fg3);margin-top:14px;line-height:1.5">'+
         'Responde mentalmente ANTES de destapar. Solo cuenta si lo reconoces '+
         'en menos de '+_umbralSegs()+' segundos.</div>'+
     '</div>';
@@ -878,20 +887,20 @@ function revelarLex() {
   _LEX.ms = ms;
   c.innerHTML =
     '<div style="text-align:center;padding:20px 8px">'+
-      '<div style="font-size:26px;font-weight:800;color:var(--acc);margin-bottom:6px;'+
+      '<div style="font-size:1.35rem;font-weight:800;color:var(--acc);margin-bottom:6px;'+
         'word-break:break-word">'+esc(resp)+'</div>'+
-      '<div style="font-size:13px;color:'+col+';font-weight:700;margin-bottom:16px">'+
+      '<div style="font-size:0.72rem;color:'+col+';font-weight:700;margin-bottom:16px">'+
         (ms/1000).toFixed(1)+' s'+(ms<=U?' · automático':' · aún estás traduciendo')+'</div>'+
       (e.op ? '<div style="background:rgba(239,68,68,.10);border:1px solid #ef4444;border-radius:8px;'+
-        'padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--fg2)">'+
+        'padding:10px 12px;margin-bottom:12px;font-size:0.72rem;color:var(--fg2)">'+
         'No lo confundas con <b>'+esc(e.op.bg)+'</b> = '+esc(e.op.es)+'</div>' : '')+
-      (e.nota ? '<div class="exp-b" style="text-align:left;font-size:12px;color:var(--fg3);'+
+      (e.nota ? '<div class="exp-b" style="text-align:left;font-size:0.68rem;color:var(--fg3);'+
         'margin-bottom:12px">'+esc(e.nota)+'</div>' : '')+
       (e.ej ? '<div style="background:var(--bg2);border-radius:8px;padding:10px 12px;'+
         'margin-bottom:16px;text-align:left">'+
-        '<div style="font-size:11px;color:var(--fg3);margin-bottom:4px">En el banco:</div>'+
-        '<div style="font-size:13px;color:var(--fg)">'+esc(e.ej.bg)+'</div>'+
-        '<div style="font-size:12px;color:var(--acc)">'+esc(e.ej.es)+'</div></div>' : '')+
+        '<div style="font-size:0.62rem;color:var(--fg3);margin-bottom:4px">En el banco:</div>'+
+        '<div style="font-size:0.72rem;color:var(--fg)">'+esc(e.ej.bg)+'</div>'+
+        '<div style="font-size:0.68rem;color:var(--acc)">'+esc(e.ej.es)+'</div></div>' : '')+
       '<div style="display:flex;gap:8px">'+
         '<button class="rbtn" style="flex:1;background:#7f1d1d;color:#fff" onclick="calificarLex(0)">No lo sabía</button>'+
         '<button class="rbtn p" style="flex:1" onclick="calificarLex(1)">Lo sabía</button>'+
@@ -914,11 +923,11 @@ function _finLex() {
   var e = AGENTS.etapaA();
   var c = document.getElementById('lex-body');
   c.innerHTML = '<div style="padding:22px 12px;text-align:center">'+
-    '<div style="font-size:20px;font-weight:800;color:var(--fg);margin-bottom:10px">Sesión terminada</div>'+
-    '<div style="font-size:14px;color:var(--fg2);margin-bottom:16px">'+
+    '<div style="font-size:1.05rem;font-weight:800;color:var(--fg);margin-bottom:10px">Sesión terminada</div>'+
+    '<div style="font-size:0.78rem;color:var(--fg2);margin-bottom:16px">'+
       _LEX.rapidas+' de '+_LEX.cola.length+' reconocidas en menos de '+_umbralSegs()+' segundos</div>'+
     '<div style="background:var(--bg2);border-radius:10px;padding:12px 14px;text-align:left;'+
-      'font-size:12px;color:var(--fg3);line-height:1.6;margin-bottom:16px">'+
+      'font-size:0.68rem;color:var(--fg3);line-height:1.6;margin-bottom:16px">'+
       (e.puerta
         ? 'Claves de la puerta: <b>'+e.puerta.automatizadas+' de '+e.puerta.total+'</b><br>' : '')+
       'Palabras decisivas: <b>'+e.decisivas.automatizadas+' de '+e.decisivas.total+'</b><br>'+
@@ -1006,15 +1015,15 @@ function mostrarCif() {
   _CIF.t0 = Date.now();
   c.innerHTML =
     '<div style="text-align:center;padding:24px 8px">'+
-      '<div style="font-size:12px;color:var(--fg3);margin-bottom:14px">'+esc(e.t)+
+      '<div style="font-size:0.68rem;color:var(--fg3);margin-bottom:14px">'+esc(e.t)+
         ' &nbsp;·&nbsp; '+(_CIF.i+1)+' de '+_CIF.cola.length+'</div>'+
       (e.img ? '<img src="'+e.img+'" alt="Señal de la pregunta" loading="lazy" '+
         'style="max-width:170px;width:60%;border-radius:8px;background:#fff;'+
         'margin-bottom:14px" onerror="this.style.display=\'none\'">' : '')+
-      '<div style="font-size:22px;font-weight:800;color:var(--fg);line-height:1.35;'+
+      '<div style="font-size:1.15rem;font-weight:800;color:var(--fg);line-height:1.35;'+
         'margin-bottom:22px">'+esc(e.q)+'</div>'+
       '<button class="rbtn p" style="width:100%;max-width:320px" onclick="revelarCif()">Ver respuesta</button>'+
-      '<div style="font-size:11px;color:var(--fg3);margin-top:14px;line-height:1.5">'+
+      '<div style="font-size:0.62rem;color:var(--fg3);margin-top:14px;line-height:1.5">'+
         'Di la cifra en voz alta antes de destapar. Si son dos números, hacen falta los dos.</div>'+
     '</div>';
 }
@@ -1030,16 +1039,16 @@ function revelarCif() {
       (e.img ? '<img src="'+e.img+'" alt="Señal de la pregunta" loading="lazy" '+
         'style="max-width:120px;width:45%;border-radius:8px;background:#fff;'+
         'margin-bottom:10px" onerror="this.style.display=\'none\'">' : '')+
-      '<div style="font-size:20px;font-weight:800;color:var(--acc);margin-bottom:6px;'+
+      '<div style="font-size:1.05rem;font-weight:800;color:var(--acc);margin-bottom:6px;'+
         'line-height:1.35">'+esc(e.r)+'</div>'+
-      '<div style="font-size:13px;color:'+col+';font-weight:700;margin-bottom:14px">'+
+      '<div style="font-size:0.72rem;color:'+col+';font-weight:700;margin-bottom:14px">'+
         (ms/1000).toFixed(1)+' s</div>'+
       '<div style="background:var(--bg2);border-radius:8px;padding:10px 12px;'+
         'margin-bottom:12px;text-align:left">'+
-        '<div style="font-size:11px;color:var(--fg3);margin-bottom:4px">Así aparece en el examen:</div>'+
-        '<div style="font-size:14px;color:var(--fg);line-height:1.4">'+esc(e.bg)+'</div>'+
-        '<div style="font-size:12px;color:var(--acc);line-height:1.4">'+esc(e.bges)+'</div></div>'+
-      (e.nota ? '<div class="exp-b" style="text-align:left;font-size:12px;color:var(--fg3);'+
+        '<div style="font-size:0.62rem;color:var(--fg3);margin-bottom:4px">Así aparece en el examen:</div>'+
+        '<div style="font-size:0.78rem;color:var(--fg);line-height:1.4">'+esc(e.bg)+'</div>'+
+        '<div style="font-size:0.68rem;color:var(--acc);line-height:1.4">'+esc(e.bges)+'</div></div>'+
+      (e.nota ? '<div class="exp-b" style="text-align:left;font-size:0.68rem;color:var(--fg3);'+
         'margin-bottom:14px">'+esc(e.nota)+'</div>' : '')+
       '<div style="display:flex;gap:8px">'+
         '<button class="rbtn" style="flex:1;background:#7f1d1d;color:#fff" onclick="calificarCif(0)">No la sabía</button>'+
@@ -1063,8 +1072,8 @@ function _finCif() {
   var e = BRAIN.estadoLex(_cifClaves());
   document.getElementById('cif-body').innerHTML =
     '<div style="padding:22px 12px;text-align:center">'+
-      '<div style="font-size:20px;font-weight:800;color:var(--fg);margin-bottom:10px">Sesión terminada</div>'+
-      '<div style="font-size:14px;color:var(--fg2);margin-bottom:16px">'+
+      '<div style="font-size:1.05rem;font-weight:800;color:var(--fg);margin-bottom:10px">Sesión terminada</div>'+
+      '<div style="font-size:0.78rem;color:var(--fg2);margin-bottom:16px">'+
         _CIF.ok+' de '+_CIF.cola.length+' acertadas &nbsp;·&nbsp; '+
         e.automatizadas+' de '+e.total+' cifras fijadas</div>'+
       _pausaHTML()+
@@ -1078,7 +1087,7 @@ window._finCif = _finCif;
 // cifra medida.
 function _pausaHTML() {
   return '<div style="background:rgba(59,130,246,.10);border:1px solid #3b82f6;border-radius:10px;'+
-    'padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--fg2);line-height:1.5;text-align:left">'+
+    'padding:10px 12px;margin-bottom:14px;font-size:0.68rem;color:var(--fg2);line-height:1.5;text-align:left">'+
     '\uD83E\uDDE0 <b>Ahora no abras nada.</b> Lo que acabas de estudiar se fija en la pausa, no '+
     'mientras sigues leyendo. Quince minutos sin pantalla, o directamente a dormir, valen más '+
     'que otra sesión seguida.</div>';
@@ -1222,15 +1231,15 @@ function _pintarSiguientePaso() {
     cont.innerHTML = '<div style="background:rgba(34,197,94,.12);border:1px solid #22c55e;'+
       'border-radius:10px;padding:14px;margin-bottom:10px;text-align:left">'+
       '<div style="font-weight:800;color:var(--fg);margin-bottom:4px">✅ Has terminado el día</div>'+
-      '<div style="font-size:12px;color:var(--fg2);line-height:1.6">Seguir ahora rinde poco: '+
+      '<div style="font-size:0.68rem;color:var(--fg2);line-height:1.6">Seguir ahora rinde poco: '+
       'lo estudiado necesita una noche para consolidarse. Vuelve mañana.</div></div>';
     return;
   }
   cont.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--acc);border-radius:10px;'+
     'padding:14px;margin-bottom:10px;text-align:left">'+
-    '<div style="font-size:11px;color:var(--fg3);text-transform:uppercase;letter-spacing:.5px">Ahora toca</div>'+
+    '<div style="font-size:0.62rem;color:var(--fg3);text-transform:uppercase;letter-spacing:.5px">Ahora toca</div>'+
     '<div style="font-weight:800;color:var(--fg);margin:2px 0 4px">'+sig.emoji+' '+esc(sig.t)+'</div>'+
-    '<div style="font-size:12px;color:var(--fg3);line-height:1.5;margin-bottom:10px">'+esc(sig.porque)+'</div>'+
+    '<div style="font-size:0.68rem;color:var(--fg3);line-height:1.5;margin-bottom:10px">'+esc(sig.porque)+'</div>'+
     '<button class="rbtn p" style="width:100%" onclick="'+sig.fn+'">Empezar · '+esc(sig.detalle)+' · ~'+sig.min+' min</button>'+
     '</div>';
 }
@@ -1285,12 +1294,12 @@ function openReglas() {
         'background:var(--bg2);border:1px solid var(--bg4);border-radius:8px;'+
         'padding:10px 12px;margin-bottom:6px;cursor:pointer">'+
         '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'+
-          '<div style="font-size:12px;font-weight:700;color:var(--fg);flex:1">'+esc(f.t)+'</div>'+
-          '<div style="font-size:12px;font-weight:700;color:'+col+'">'+f.dominadas+'/'+f.total+'</div>'+
+          '<div style="font-size:0.68rem;font-weight:700;color:var(--fg);flex:1">'+esc(f.t)+'</div>'+
+          '<div style="font-size:0.68rem;font-weight:700;color:'+col+'">'+f.dominadas+'/'+f.total+'</div>'+
         '</div>'+
         '<div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;margin:6px 0 4px">'+
           '<div style="height:100%;width:'+f.pct+'%;background:'+col+'"></div></div>'+
-        '<div style="font-size:11px;color:var(--fg3)">'+
+        '<div style="font-size:0.62rem;color:var(--fg3)">'+
           (f.falladas ? '\u2717 fallas '+f.falladas+' de '+f.total : 'sin fallos pendientes')+
           (f.leida ? ' \u00b7 regla le\u00edda' : ' \u00b7 \ud83d\udcd6 regla sin leer')+'</div>'+
         '</button>';
@@ -1461,7 +1470,7 @@ function confA() {
     var meta  = _metaSeg(q.id);
     var color = timeSpent<=meta?'#22c55e':timeSpent<=meta*1.6?'#eab308':'#ef4444';
     var icon  = timeSpent<=meta?'⚡':timeSpent<=meta*1.6?'✓':'🐢';
-    speedEl.innerHTML = '<span style="color:'+color+';font-size:11px">'+icon+' '+timeSpent+'s / meta '+meta+'s</span>';
+    speedEl.innerHTML = '<span style="color:'+color+';font-size:0.62rem">'+icon+' '+timeSpent+'s / meta '+meta+'s</span>';
   }
 
   document.getElementById('btn-ok').style.display='none';
@@ -1554,7 +1563,7 @@ function endS() {
   var extra=document.getElementById('res-extra');
   if(extra) {
     if(S.mode==='realexam') {
-      extra.innerHTML='<div style="padding:8px 0;font-size:14px;color:var(--fg2);text-align:center">'+
+      extra.innerHTML='<div style="padding:8px 0;font-size:0.78rem;color:var(--fg2);text-align:center">'+
         '📊 Dist. real: R4=22 • R3=7 • R2=4 • Vid=2<br>'+
         (pass?'🚗 Nivel aprobado. Repite hasta estabilizar 90%':'📚 Revisa errores → Última Hora')+
         '</div>';
@@ -1562,17 +1571,17 @@ function endS() {
     } else if(S.mode==='examdry') {
       // Modo seco: ahora sí revelar resultados pregunta a pregunta
       var html='<div style="padding:10px 0">';
-      html+='<div style="font-size:15px;font-weight:700;margin-bottom:10px;color:'+(pass?'var(--green)':'var(--red)')+'">'+
+      html+='<div style="font-size:0.82rem;font-weight:700;margin-bottom:10px;color:'+(pass?'var(--green)':'var(--red)')+'">'+
         (pass?'✅ APROBADO':'❌ SUSPENDIDO')+' — '+S.score+'/'+S.maxS+' pts ('+pct+'%)</div>';
-      html+='<div style="font-size:13px;color:var(--fg3);margin-bottom:8px">Revisión completa:</div>';
+      html+='<div style="font-size:0.72rem;color:var(--fg3);margin-bottom:8px">Revisión completa:</div>';
       EXAM_LOG.forEach(function(log,idx){
         var q=log.q;
         var correctA=(q.a||[]).filter(function(a){return a.ok;}).map(function(a){return a.es||a.t||'';}).join(', ');
         html+='<div style="padding:8px;margin-bottom:6px;border-radius:8px;background:var(--bg2);border-left:3px solid '+(log.ok?'var(--green)':'var(--red)')+'">'+
-          '<div style="font-size:13px;font-weight:600;color:'+(log.ok?'var(--green)':'var(--red)')+'">'+
+          '<div style="font-size:0.72rem;font-weight:600;color:'+(log.ok?'var(--green)':'var(--red)')+'">'+
           (log.ok?'✅':'❌')+' '+(idx+1)+'. '+(q.es||q.bg||'').substring(0,60)+'</div>'+
-          (log.ok?'':'<div style="font-size:12px;color:var(--fg3);margin-top:3px">✓ '+correctA+'</div>')+
-          (q.explain&&!log.ok?'<div style="font-size:12px;color:var(--acc2);margin-top:3px">'+q.explain.substring(0,120)+'</div>':'')+
+          (log.ok?'':'<div style="font-size:0.68rem;color:var(--fg3);margin-top:3px">✓ '+correctA+'</div>')+
+          (q.explain&&!log.ok?'<div style="font-size:0.68rem;color:var(--acc2);margin-top:3px">'+q.explain.substring(0,120)+'</div>':'')+
           '</div>';
       });
       html+='</div>';
@@ -1580,7 +1589,7 @@ function endS() {
       extra.style.display='';
     } else if(S.failedIds&&S.failedIds.length>0&&(S.mode==='adaptive'||S.mode==='ultimahora')) {
       // Corrective feedback disponible
-      extra.innerHTML='<div style="padding:8px 0;font-size:14px;color:var(--red)">'+
+      extra.innerHTML='<div style="padding:8px 0;font-size:0.78rem;color:var(--red)">'+
         '❌ Fallaste '+S.ko+' pregunta'+(S.ko>1?'s':'')+'. ¿Repasar las falladas ahora?</div>';
       extra.style.display='';
     } else {
@@ -1669,8 +1678,8 @@ function openReview(){
                    '🐢 Ritmo lento — entrena velocidad con F1 y F2';
     resumenVel =
       '<div style="padding:12px 16px;background:var(--bg2);border-radius:10px;margin-bottom:12px;border-left:3px solid '+velColor+'">'+
-      '<div style="font-size:13px;font-weight:700;color:'+velColor+'">'+velMsg+'</div>'+
-      '<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--fg3)">'+
+      '<div style="font-size:0.72rem;font-weight:700;color:'+velColor+'">'+velMsg+'</div>'+
+      '<div style="display:flex;gap:16px;margin-top:8px;font-size:0.68rem;color:var(--fg3)">'+
       '<span>⏱ Media: <b style="color:var(--fg)">'+avgTime+'s</b>/preg</span>'+
       '<span>⚡ Rápidas ≤20s: <b style="color:#22c55e">'+rapidas.length+'</b></span>'+
       '<span>🐢 Lentas >40s: <b style="color:#ef4444">'+lentas.length+'</b></span>'+
@@ -1686,7 +1695,7 @@ function openReview(){
     html += '<div class="rev-item">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
     html += '<div class="rev-q" style="flex:1">'+(entry.ok?'✅':'❌')+' '+(i+1)+'. '+esc(entry.q.bg||'')+'</div>';
-    if (t>0) html += '<div style="font-size:11px;color:'+velColor+';font-weight:700;margin-left:6px;flex-shrink:0">'+velIcon+' '+t+'s</div>';
+    if (t>0) html += '<div style="font-size:0.62rem;color:'+velColor+';font-weight:700;margin-left:6px;flex-shrink:0">'+velIcon+' '+t+'s</div>';
     html += '</div>';
     if (entry.q.es) html += '<div class="rev-q-es">'+esc(entry.q.es)+'</div>';
     (entry.q.a||[]).forEach(function(a,ai){
@@ -1700,7 +1709,7 @@ function openReview(){
       '<button class="btn-speak-es" onclick="TTS.speakES(\''+esc(entry.q.explain||'')+'\')">🔊</button></div>';
     // Preg lenta: sugerir práctica
     if (t>40 && entry.q.fase<=2) {
-      html += '<div style="font-size:11px;color:var(--acc);margin-top:4px">⚡ Esta preg de F'+entry.q.fase+' debería salir en <15s — practica hasta reconocimiento inmediato</div>';
+      html += '<div style="font-size:0.62rem;color:var(--acc);margin-top:4px">⚡ Esta preg de F'+entry.q.fase+' debería salir en <15s — practica hasta reconocimiento inmediato</div>';
     }
     html += '</div>';
   });
@@ -1878,9 +1887,9 @@ function rendPodcastOptions() {
       'display:flex;align-items:center;gap:12px;width:100%;background:var(--bg2);'+
       'border:1px solid var(--bg4);border-radius:10px;padding:14px 16px;'+
       'margin-bottom:8px;cursor:pointer;text-align:left">'+
-      '<div style="font-size:22px">'+op.label.split(' ')[0]+'</div>'+
-      '<div><div style="font-size:14px;font-weight:600;color:var(--fg)">'+op.label.substring(op.label.indexOf(' ')+1)+'</div>'+
-      '<div style="font-size:12px;color:var(--fg3)">'+op.desc+' ('+op.n+' preg)</div></div>'+
+      '<div style="font-size:1.15rem">'+op.label.split(' ')[0]+'</div>'+
+      '<div><div style="font-size:0.78rem;font-weight:600;color:var(--fg)">'+op.label.substring(op.label.indexOf(' ')+1)+'</div>'+
+      '<div style="font-size:0.68rem;color:var(--fg3)">'+op.desc+' ('+op.n+' preg)</div></div>'+
       '</button>';
   }).join('');
 }
@@ -1952,22 +1961,22 @@ function openMisionDia() {
   }
 
   var h = '<div style="padding:16px">';
-  h += '<div style="font-size:13px;color:var(--fg3)">'+hoy+' · semana '+plan.semana+
+  h += '<div style="font-size:0.72rem;color:var(--fg3)">'+hoy+' · semana '+plan.semana+
        (plan.dias!==null?' · faltan '+plan.dias+' días':'')+'</div>';
-  h += '<div style="font-size:20px;font-weight:800;color:var(--fg);margin:4px 0 10px">'+
+  h += '<div style="font-size:1.05rem;font-weight:800;color:var(--fg);margin:4px 0 10px">'+
        (plan.cerrado?'✅ Día cerrado':'Tu clase de hoy')+'</div>';
 
   // ── medidor de nivel
   h += '<div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;padding:12px 14px;margin-bottom:14px">'+
-    '<div style="font-size:12px;color:var(--fg3)">Nivel estimado si te examinaras hoy</div>'+
-    '<div style="font-size:26px;font-weight:800;color:var(--acc)">'+est.pts+' <span style="font-size:14px;color:var(--fg3)">/ 97 pts</span></div>'+
+    '<div style="font-size:0.68rem;color:var(--fg3)">Nivel estimado si te examinaras hoy</div>'+
+    '<div style="font-size:1.35rem;font-weight:800;color:var(--acc)">'+est.pts+' <span style="font-size:0.78rem;color:var(--fg3)">/ 97 pts</span></div>'+
     '<div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;margin:8px 0">'+
       '<div style="height:100%;width:'+Math.min(100,est.pct)+'%;background:var(--acc)"></div></div>'+
-    '<div style="font-size:11px;color:var(--fg3)">Aprobado en 87. '+
+    '<div style="font-size:0.62rem;color:var(--fg3)">Aprobado en 87. '+
       (est.muestraBase>=30
         ? 'Calculado con tu acierto real a la primera ('+est.base+'% en '+est.muestraBase+' preguntas).'
         : 'Aún estimado al 50% en lo no visto: hacen falta 30 preguntas nuevas para afinarlo ('+est.muestraBase+'/30).')+
-    '</div>'+ (delta?'<div style="font-size:12px;margin-top:6px">'+delta+'</div>':'') +
+    '</div>'+ (delta?'<div style="font-size:0.68rem;margin-top:6px">'+delta+'</div>':'') +
     '</div>';
 
   // ── proyeccion: vas a llegar?
@@ -1979,9 +1988,9 @@ function openMisionDia() {
                     sin_datos:'Todavía no puedo proyectar'}[pr.veredicto];
       h += '<div style="background:var(--bg2);border:1px solid '+(pr.veredicto==='no_llegas'?'#ef4444':'var(--bg4)')+
         ';border-radius:10px;padding:12px 14px;margin-bottom:14px">'+
-        '<div style="font-size:12px;color:var(--fg3)">Camino hasta el examen</div>'+
-        '<div style="font-size:17px;font-weight:800;color:'+col+'">'+titulo+'</div>'+
-        '<div style="font-size:12px;color:var(--fg2);line-height:1.6;margin-top:6px">'+
+        '<div style="font-size:0.68rem;color:var(--fg3)">Camino hasta el examen</div>'+
+        '<div style="font-size:0.90rem;font-weight:800;color:'+col+'">'+titulo+'</div>'+
+        '<div style="font-size:0.68rem;color:var(--fg2);line-height:1.6;margin-top:6px">'+
           'Te faltan <b>'+pr.pendientes+'</b> por dominar en <b>'+pr.dias+'</b> días: '+
           '<b>'+pr.necesarioPorDia+' al día</b>.'+
           (pr.ritmoPorDia !== null
@@ -1989,10 +1998,10 @@ function openMisionDia() {
             : ' Aún no tengo ritmo medido.')+
         '</div>'+
         (pr.ptsProyectados !== null
-          ? '<div style="font-size:12px;color:var(--fg2);margin-top:4px">Llegarías con unos <b>'+
+          ? '<div style="font-size:0.68rem;color:var(--fg2);margin-top:4px">Llegarías con unos <b>'+
             pr.ptsProyectados+' de 97</b>.</div>' : '')+
         (!pr.fiable
-          ? '<div style="font-size:11px;color:var(--fg3);margin-top:6px;line-height:1.5">'+
+          ? '<div style="font-size:0.62rem;color:var(--fg3);margin-top:6px;line-height:1.5">'+
             'Esta proyección todavía no es fiable: hacen falta al menos 3 días de uso y 3 '+
             'mediciones semanales. Llevas '+pr.diasDeHistoria+' y '+pr.mediciones+'.</div>' : '')+
         '</div>';
@@ -2002,25 +2011,25 @@ function openMisionDia() {
   // ── cuanto tiempo tengo hoy
   var presAct = _presupuestoHoy();
   h += '<div style="margin-bottom:12px">'+
-    '<div style="font-size:12px;color:var(--fg3);margin-bottom:6px">¿Cuánto tiempo tienes hoy?</div>'+
+    '<div style="font-size:0.68rem;color:var(--fg3);margin-bottom:6px">¿Cuánto tiempo tienes hoy?</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   [15,30,45,60].forEach(function(m){
     var act = presAct === m;
     h += '<button onclick="setPresupuesto('+m+')" style="flex:1;min-width:56px;padding:8px 4px;'+
-      'border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;'+
+      'border-radius:8px;font-size:0.68rem;font-weight:700;cursor:pointer;'+
       'background:'+(act?'var(--acc)':'var(--bg2)')+';color:'+(act?'#fff':'var(--fg2)')+';'+
       'border:1px solid '+(act?'var(--acc)':'var(--bg4)')+'">'+m+' min</button>';
   });
   h += '<button onclick="setPresupuesto(0)" style="flex:1;min-width:56px;padding:8px 4px;'+
-    'border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;'+
+    'border-radius:8px;font-size:0.68rem;font-weight:700;cursor:pointer;'+
     'background:'+(presAct?'var(--bg2)':'var(--acc)')+';color:'+(presAct?'var(--fg2)':'#fff')+';'+
     'border:1px solid '+(presAct?'var(--bg4)':'var(--acc)')+'">Todo</button>';
-  h += '</div>'+ (plan.fuera ? '<div style="font-size:11px;color:var(--fg3);margin-top:6px">'+
+  h += '</div>'+ (plan.fuera ? '<div style="font-size:0.62rem;color:var(--fg3);margin-top:6px">'+
     plan.fuera+' bloque'+(plan.fuera>1?'s':'')+' no cabe'+(plan.fuera>1?'n':'')+
     ' en '+presAct+' min. Están abajo, en gris.</div>' : '') + '</div>';
 
   // ── barra de avance del dia
-  h += '<div style="font-size:12px;color:var(--fg3);margin-bottom:8px">'+
+  h += '<div style="font-size:0.68rem;color:var(--fg3);margin-bottom:8px">'+
        plan.hechos+' de '+plan.total+' bloques · '+
        (plan.cerrado?'nada pendiente':'~'+plan.minutos+' min restantes')+'</div>';
 
@@ -2041,16 +2050,16 @@ function openMisionDia() {
       'background:var(--bg2);border:'+(esAhora?'2px':'1px')+' solid '+borde+';'+
       'border-radius:10px;padding:12px 14px;margin-bottom:'+(esAhora?'4px':'8px')+';cursor:'+(esAhora?'pointer':'default')+'">'+
       '<div style="display:flex;gap:10px;align-items:center">'+
-        '<div style="font-size:22px">'+icono+'</div>'+
+        '<div style="font-size:1.15rem">'+icono+'</div>'+
         '<div style="flex:1">'+
-          '<div style="font-size:14px;font-weight:700;color:var(--fg)">'+
+          '<div style="font-size:0.78rem;font-weight:700;color:var(--fg)">'+
             (b.cabe===false?'':'Paso '+_n+' · ')+b.t+'</div>'+
-          '<div style="font-size:12px;color:'+(esAhora?'var(--acc)':'var(--fg3)')+';font-weight:600">'+
+          '<div style="font-size:0.68rem;color:'+(esAhora?'var(--acc)':'var(--fg3)')+';font-weight:600">'+
             b.detalle+' · ~'+b.min+' min'+(b.cabe===false?' · no cabe hoy':'')+
             (esperando?' · después de este':'')+'</div>'+
         '</div></div>'+
       (esAhora || b.hecho
-        ? '<div style="font-size:11px;color:var(--fg3);margin-top:6px;line-height:1.5">'+b.porque+'</div>'
+        ? '<div style="font-size:0.62rem;color:var(--fg3);margin-top:6px;line-height:1.5">'+b.porque+'</div>'
         : '')+
       '</button>';
     // Válvula de escape: si un paso no se puede hacer (por ejemplo, no
@@ -2059,14 +2068,14 @@ function openMisionDia() {
     if (esAhora) {
       h += '<div style="text-align:right;margin-bottom:10px">'+
         '<button onclick="saltarPaso(\''+b.id+'\')" style="background:none;border:none;'+
-        'color:var(--fg3);font-size:11px;text-decoration:underline;cursor:pointer;padding:4px 2px">'+
+        'color:var(--fg3);font-size:0.62rem;text-decoration:underline;cursor:pointer;padding:4px 2px">'+
         'No puedo con este ahora · saltar</button></div>';
     }
   });
 
   if (plan.cerrado) {
     h += '<div style="background:rgba(34,197,94,.1);border:1px solid #22c55e;border-radius:10px;'+
-      'padding:12px 14px;margin-top:6px;font-size:12px;color:var(--fg2);line-height:1.6">'+
+      'padding:12px 14px;margin-top:6px;font-size:0.68rem;color:var(--fg2);line-height:1.6">'+
       'Has hecho todo lo de hoy. Seguir estudiando ahora rinde poco: el material '+
       'necesita una noche para consolidarse. Vuelve mañana.</div>';
   }
@@ -2078,12 +2087,12 @@ function openMisionDia() {
       var colD = de.pctBG >= 80 ? '#22c55e' : de.pctBG >= 40 ? '#eab308' : '#ef4444';
       h += '<div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;'+
         'padding:12px 14px;margin-bottom:14px">'+
-        '<div style="font-size:12px;color:var(--fg3)">Destete del español</div>'+
-        '<div style="font-size:24px;font-weight:800;color:'+colD+'">'+de.dominadasBG+
-          ' <span style="font-size:14px;color:var(--fg3)">de '+de.dominadas+' dominadas ya son en búlgaro puro</span></div>'+
+        '<div style="font-size:0.68rem;color:var(--fg3)">Destete del español</div>'+
+        '<div style="font-size:1.25rem;font-weight:800;color:'+colD+'">'+de.dominadasBG+
+          ' <span style="font-size:0.78rem;color:var(--fg3)">de '+de.dominadas+' dominadas ya son en búlgaro puro</span></div>'+
         '<div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;margin:8px 0">'+
           '<div style="height:100%;width:'+de.pctBG+'%;background:'+colD+'"></div></div>'+
-        '<div style="font-size:11px;color:var(--fg3);line-height:1.5">'+
+        '<div style="font-size:0.62rem;color:var(--fg3);line-height:1.5">'+
         'Nivel de cada pregunta: <b>'+de.nivel0+'</b> con traducción, <b>'+de.nivel1+
         '</b> en búlgaro con la traducción a un toque, <b>'+de.nivel2+'</b> en búlgaro puro. '+
         'El examen es entero en búlgaro: lo que cuenta al final es la tercera cifra.</div></div>';
@@ -2097,10 +2106,10 @@ function openMisionDia() {
       var colT = tr.pct >= 80 ? '#22c55e' : tr.pct >= 50 ? '#eab308' : '#ef4444';
       h += '<div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;'+
         'padding:12px 14px;margin-bottom:14px">'+
-        '<div style="font-size:12px;color:var(--fg3)">Índice de transferencia</div>'+
-        '<div style="font-size:24px;font-weight:800;color:'+colT+'">'+tr.pct+'%'+
-          ' <span style="font-size:12px;color:var(--fg3)">'+tr.coherentes+' de '+tr.tocados+' grupos</span></div>'+
-        '<div style="font-size:11px;color:var(--fg3);line-height:1.5;margin-top:4px">'+
+        '<div style="font-size:0.68rem;color:var(--fg3)">Índice de transferencia</div>'+
+        '<div style="font-size:1.25rem;font-weight:800;color:'+colT+'">'+tr.pct+'%'+
+          ' <span style="font-size:0.68rem;color:var(--fg3)">'+tr.coherentes+' de '+tr.tocados+' grupos</span></div>'+
+        '<div style="font-size:0.62rem;color:var(--fg3);line-height:1.5;margin-top:4px">'+
         'De los grupos de preguntas gemelas que has tocado, en cuántos respondes bien a TODAS. '+
         'Mide si sabes la regla o si recuerdas el texto.'+
         (tr.incoherentes ? ' <b style="color:#ef4444">Hay '+tr.incoherentes+' donde aciertas una y fallas otra.</b>' : '')+
@@ -2116,8 +2125,8 @@ function openMisionDia() {
       if (b.falladas !== a.falladas) return b.falladas - a.falladas;
       return a.pct - b.pct;
     });
-    h += '<div style="margin-top:18px;font-size:13px;font-weight:700;color:var(--fg)">Familias de reglas</div>'+
-         '<div style="font-size:11px;color:var(--fg3);margin-bottom:8px">Cada familia son las preguntas '+
+    h += '<div style="margin-top:18px;font-size:0.72rem;font-weight:700;color:var(--fg)">Familias de reglas</div>'+
+         '<div style="font-size:0.62rem;color:var(--fg3);margin-bottom:8px">Cada familia son las preguntas '+
          'que dependen de UNA misma regla. Fallar varias de la misma familia no es despiste: '+
          'es que falta la regla.</div>';
     fams.slice(0, 10).forEach(function(f){
@@ -2126,12 +2135,12 @@ function openMisionDia() {
         'background:var(--bg2);border:1px solid var(--bg4);border-radius:8px;'+
         'padding:10px 12px;margin-bottom:6px;cursor:pointer">'+
         '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">'+
-          '<div style="font-size:12px;font-weight:700;color:var(--fg);flex:1">'+esc(f.t)+'</div>'+
-          '<div style="font-size:12px;font-weight:700;color:'+col+'">'+f.dominadas+'/'+f.total+'</div>'+
+          '<div style="font-size:0.68rem;font-weight:700;color:var(--fg);flex:1">'+esc(f.t)+'</div>'+
+          '<div style="font-size:0.68rem;font-weight:700;color:'+col+'">'+f.dominadas+'/'+f.total+'</div>'+
         '</div>'+
         '<div style="height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;margin:6px 0 4px">'+
           '<div style="height:100%;width:'+f.pct+'%;background:'+col+'"></div></div>'+
-        '<div style="font-size:11px;color:var(--fg3)">'+
+        '<div style="font-size:0.62rem;color:var(--fg3)">'+
           (f.falladas ? '✗ fallas '+f.falladas+' de '+f.total : 'sin fallos pendientes')+
           (f.leida ? ' · regla leída' : ' · 📖 regla sin leer')+
           (f.art ? ' · '+esc(f.art) : '')+'</div>'+
@@ -2141,13 +2150,13 @@ function openMisionDia() {
 
   // ── historial de mediciones
   if (cps.length) {
-    h += '<div style="margin-top:18px;font-size:13px;font-weight:700;color:var(--fg)">Mediciones semanales</div>'+
-         '<div style="font-size:11px;color:var(--fg3);margin-bottom:8px">Misma estructura cada semana '+
+    h += '<div style="margin-top:18px;font-size:0.72rem;font-weight:700;color:var(--fg)">Mediciones semanales</div>'+
+         '<div style="font-size:0.62rem;color:var(--fg3);margin-bottom:8px">Misma estructura cada semana '+
          '(12 de 1pt + 14 de 2pt + 19 de 3pt) con preguntas distintas, para que las notas sean comparables.</div>';
     cps.slice(-8).forEach(function(c){
       var mm = Math.floor((c.seg||0)/60), ss = (c.seg||0)%60;
       h += '<div style="display:flex;justify-content:space-between;background:var(--bg2);'+
-        'border-radius:8px;padding:9px 12px;margin-bottom:6px;font-size:12px">'+
+        'border-radius:8px;padding:9px 12px;margin-bottom:6px;font-size:0.68rem">'+
         '<span style="color:var(--fg3)">Semana '+c.semana+'</span>'+
         '<span style="color:'+(c.pts>=87?'#22c55e':c.pts>=70?'#eab308':'#ef4444')+';font-weight:700">'+
           c.pts+'/97 · '+mm+'m'+(ss<10?'0':'')+ss+'s</span></div>';
@@ -2385,14 +2394,14 @@ function doSearch() {
   if (!res) return;
   if (!found.length) { res.innerHTML='<div style="color:#8b949e;padding:12px 0">Sin resultados para "'+esc(q)+'"</div>'; return; }
 
-  res.innerHTML = '<div style="color:#8b949e;font-size:12px;margin-bottom:8px">'+found.length+' resultado'+(found.length>1?'s':'')+'</div>' +
+  res.innerHTML = '<div style="color:#8b949e;font-size:0.68rem;margin-bottom:8px">'+found.length+' resultado'+(found.length>1?'s':'')+'</div>' +
     found.map(function(item){
       var heat = BRAIN.getHeatIcon(item.id);
       var es = (item.es||'').substring(0,80);
       var bg = (item.bg||'').substring(0,60);
       return '<div class="search-result" onclick="launchSearch('+item.id+')" style="padding:10px;margin-bottom:6px;background:var(--bg2);border-radius:8px;cursor:pointer;border-left:3px solid '+(heat?'#f97316':'var(--bg4)')+'">'+
-        '<div style="font-size:13px;font-weight:600;color:var(--fg)">'+esc(es||bg)+'</div>'+
-        '<div style="font-size:11px;color:#8b949e;margin-top:2px">'+(item.p||1)+'pt • '+(item.s||'')+(heat?' • '+heat+' '+BRAIN.getProb(item.id)+'%':'')+'</div>'+
+        '<div style="font-size:0.72rem;font-weight:600;color:var(--fg)">'+esc(es||bg)+'</div>'+
+        '<div style="font-size:0.62rem;color:#8b949e;margin-top:2px">'+(item.p||1)+'pt • '+(item.s||'')+(heat?' • '+heat+' '+BRAIN.getProb(item.id)+'%':'')+'</div>'+
         '</div>';
     }).join('');
 }
@@ -2897,7 +2906,7 @@ function rendProg(){
       svg+='</svg>';
       chartEl.innerHTML=svg;
     } else {
-      chartEl.innerHTML='<div style="color:#8b949e;font-size:12px;text-align:center;padding:40px 0">Haz al menos 2 simulacros para ver el gráfico</div>';
+      chartEl.innerHTML='<div style="color:#8b949e;font-size:0.68rem;text-align:center;padding:40px 0">Haz al menos 2 simulacros para ver el gráfico</div>';
     }
   }
 
@@ -2913,7 +2922,7 @@ function rendProg(){
     }
     if(hourData.length>=2){
       var best=hourData.reduce(function(a,b){return b.rate>a.rate?b:a;});
-      var html='<div style="margin-bottom:8px;font-size:12px;color:var(--fg3)">Tu mejor hora: <span style="color:#f97316;font-weight:700">'+best.h+'h-'+(best.h+1)+'h ('+best.rate+'% acierto)</span></div>';
+      var html='<div style="margin-bottom:8px;font-size:0.68rem;color:var(--fg3)">Tu mejor hora: <span style="color:#f97316;font-weight:700">'+best.h+'h-'+(best.h+1)+'h ('+best.rate+'% acierto)</span></div>';
       html+='<div class="hour-bars">';
       hourData.forEach(function(d){
         var col=d.rate>=85?'#22c55e':d.rate>=70?'#eab308':'#ef4444';
@@ -2924,7 +2933,7 @@ function rendProg(){
       html+='</div>';
       hourEl.innerHTML=html;
     } else {
-      hourEl.innerHTML='<div style="color:#8b949e;font-size:12px;text-align:center;padding:12px 0">Estudia en distintas horas para ver cuándo rindes mejor</div>';
+      hourEl.innerHTML='<div style="color:#8b949e;font-size:0.68rem;text-align:center;padding:12px 0">Estudia en distintas horas para ver cuándo rindes mejor</div>';
     }
   }
 
@@ -2965,7 +2974,7 @@ function rendProg(){
       var col=e.pct>=90?'#22c55e':e.pct>=75?'#eab308':'#ef4444';
       return '<div class="pex"><div class="pex-l">'+e.label+' &bull; '+e.date+'</div>'+
         '<div class="pex-r" style="color:'+col+'">'+e.pct+'%'+(e.pct>=90?' ✅':'')+'</div></div>';
-    }).join(''):'<div style="color:#8b949e;font-size:12px;padding:5px 0">Sin simulacros aún. Haz uno ahora.</div>';
+    }).join(''):'<div style="color:#8b949e;font-size:0.68rem;padding:5px 0">Sin simulacros aún. Haz uno ahora.</div>';
   }
 
   // ── LOGROS ───────────────────────────────────────────────────────
@@ -2974,7 +2983,7 @@ function rendProg(){
   BRAIN.getAchievements().forEach(function(ach){
     var d=document.createElement('div');d.className='ach'+(ach.earned?' earned':'');
     d.innerHTML='<div class="ach-icon" style="opacity:'+(ach.earned?'1':'.3')+'">'+ach.icon+'</div>'+
-      '<div class="ach-lbl">'+ach.label+(ach.earned?'<br><span style="font-size:9px;color:#f97316">'+ach.earned+'</span>':'')+'</div>';
+      '<div class="ach-lbl">'+ach.label+(ach.earned?'<br><span style="font-size:0.62rem;color:#f97316">'+ach.earned+'</span>':'')+'</div>';
     ag.appendChild(d);
   });}
 
