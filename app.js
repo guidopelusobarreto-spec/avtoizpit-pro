@@ -421,8 +421,10 @@ function mod(m) {
   if (m === 'prueba') {
     qs = AGENTS.buildPrueba(ALL, BRAIN.semanaDeEstudio());
     title = 'Prueba patrón · semana ' + BRAIN.semanaDeEstudio();
-    sub = '45 preg • 97 pts • misma estructura cada semana';
-    explain = false; exam = true; timed = true; timeLimit = 2400; dryRun = true;
+    sub = '45 preg • 97 pts • 30 min de entrenamiento';
+    // 30 min y no 40: entrenar con menos tiempo del que da el examen deja
+    // margen el día real para revisar las multirrespuesta con calma.
+    explain = false; exam = true; timed = true; timeLimit = 1800; dryRun = true;
   } else
   if (m === 'lex') { openLex(); return; }
   if (m === 'destete') {
@@ -468,8 +470,8 @@ function mod(m) {
     title = 'Examen Adaptativo'; sub = '4 agentes coordinados'; explain=false; exam=true;
   } else if (m === 'exam') {
     qs = AGENTS.buildExamFrom(ALL, VIDS);
-    title = 'Simulacro Oficial'; sub = '45 preg \u2022 40 min como el real';
-    explain=false; exam=true; timed=true; timeLimit=2400;
+    title = 'Simulacro Oficial'; sub = '45 preg \u2022 30 min de entrenamiento';
+    explain=false; exam=true; timed=true; timeLimit=1800;
   } else if (m === 'quick') {
     qs = BRAIN.shA(AGENTS.buildAdaptive(ALL,VIDS).slice(0,10));
     title = 'Prueba Rapida'; sub = '10 preg \u2022 5 min'; timed=true; timeLimit=300;
@@ -495,7 +497,9 @@ function mod(m) {
   } else if (m === 'realexam') {
     // AGENTE 5: Simulacro Examen Real — distribución exacta de 200 tests
     qs = AGENTS.buildRealExam(ALL, VIDS);
-    title = '📋 Simulacro Real'; sub = '45 preg • distribución real • 40 min';
+    // EL ÚNICO que replica el examen oficial: 40 minutos exactos, sin
+    // ninguna ayuda que la tablet no dé. Todo lo demás se entrena a 30.
+    title = '📋 Simulacro Real'; sub = '45 preg • 40 min • sin ayudas, como el oficial';
     explain=false; exam=true; timed=true; timeLimit=2400;
   } else if (m === 'ultimahora') {
     // AGENTE 6: Última Hora — Top frecuentes no dominadas
@@ -512,8 +516,8 @@ function mod(m) {
   } else if (m === 'examdry') {
     // Examen Seco — sin feedback, condiciones reales КАТ
     qs = AGENTS.buildRealExam(ALL, VIDS);
-    title = '📋 Examen Seco'; sub = 'Sin feedback • 45 preg • 40 min • condiciones reales';
-    explain=false; exam=true; timed=true; timeLimit=2400;
+    title = '📋 Examen Seco'; sub = 'Sin feedback • 45 preg • 30 min de entrenamiento';
+    explain=false; exam=true; timed=true; timeLimit=1800;
     dryRun = true;
   } else if (m === 'fase1') {
     qs = AGENTS.buildFase1(ALL);
@@ -682,6 +686,27 @@ function startTimer(sec) {
   tick(); TIMER = setInterval(tick, 1000);
 }
 
+// Modos que imitan el examen oficial: ahí no hay ninguna ayuda que el
+// examen no dé. El oficial muestra los puntos de la pregunta y nada más.
+var MODOS_EXAMEN = {realexam:1, examdry:1, prueba:1, ultimahora:1, quick:1};
+function _modoExamenReal() {
+  return !!(S && MODOS_EXAMEN[S.mode]);
+}
+
+// El «(2 correctas)» lo añadimos nosotros al traducir: no está en el
+// búlgaro de ninguna de las 542 preguntas multirespuesta del banco. En
+// los simulacros se quita del texto, no solo de la insignia, o la pista
+// se cuela por la traducción.
+function _sinPista(t) {
+  if (!_modoExamenReal()) return t;
+  return String(t || '')
+    .replace(/\s*[\(（]\s*\d+\s*correctas?\s*[\)）]/gi, '')
+    .replace(/\s*⚠️?\s*\d+\s*correctas?/gi, '')
+    .replace(/\s*\(VIDEO\)\s*/gi, ' ')
+    .trim();
+}
+window._sinPista = _sinPista;
+
 function renderQ() {
   var q = S.qs[S.idx]; if (!q) { endS(); return; }
   S.sel=[]; S.done=false; S.confidence=null; _qStart=Date.now();
@@ -712,7 +737,11 @@ function renderQ() {
 
   if ((q.sim||0)>0.5) bdg(bdb,'bt','Trampa');
   var nc=(q.a||[]).filter(function(a){return a.ok;}).length;
-  if (nc>1) bdg(bdb,'bm',nc+' correctas');
+  // Cuántas respuestas son correctas es una muleta NUESTRA: el examen
+  // solo muestra los puntos de cada pregunta. Se mantiene mientras se
+  // entrena y desaparece en los modos que imitan el examen real, porque
+  // saber que son dos ya descarta la mitad de las combinaciones.
+  if (nc>1 && !_modoExamenReal()) bdg(bdb,'bm',nc+' correctas');
   if (q.v||q.rta_v) bdg(bdb,'bv','Video');
 
   var body = document.getElementById('qbody'); body.innerHTML='';
@@ -748,7 +777,8 @@ function renderQ() {
   // ES translation (always visible)
   if (q.es) {
     var esb=document.createElement('div'); esb.id='qesbox'; esb.className='qes-box';
-    esb.innerHTML='<div class="qes-lbl">Traduccion ES</div><div class="qes-txt">'+esc(q.es)+'</div>';
+    esb.innerHTML='<div class="qes-lbl">Traduccion ES</div><div class="qes-txt">'+
+      esc(_sinPista(q.es))+'</div>';
     body.appendChild(esb);
   }
 
@@ -964,6 +994,203 @@ function openLex() {
   mostrarLex();
 }
 window.openLex = openLex;
+
+// ══════════════════════════════════════════════════════════════════
+// VERDADERO O FALSO · la afirmación como unidad de estudio
+// ══════════════════════════════════════════════════════════════════
+// 258 frases del banco aparecen como opción en dos o más preguntas y su
+// veredicto no cambia nunca: o son siempre correctas o siempre falsas.
+// Tocan 361 preguntas y 726 puntos. Aprendida la frase, queda resuelta
+// donde salga, y el examen puede recolocarla en otra pregunta sin que
+// eso te afecte. Va cerrado durante la Etapa A: son frases en búlgaro y
+// juzgarlas sin saber leerlas es adivinar.
+var _AF = null;
+
+function openAfirm() {
+  if (_puertaCerrada()) { avisoPuerta(); return; }
+  var lista;
+  try { lista = AGENTS.afirmaciones(ALL); } catch (e) { lista = []; }
+  if (!lista.length) { toast('No hay afirmaciones disponibles'); return; }
+  var porClave = {};
+  lista.forEach(function(a){ porClave[a.k] = a; });
+  var cola = BRAIN.colaLex(lista.map(function(a){ return a.k; }), 15);
+  if (!cola.length) { toast('Afirmaciones al día: vuelve mañana'); return; }
+  _AF = { cola: cola, mapa: porClave, i: 0, ok: 0, t0: 0 };
+  show('s-afirm');
+  mostrarAf();
+}
+window.openAfirm = openAfirm;
+
+function mostrarAf() {
+  var c = document.getElementById('af-body');
+  if (!c) return;
+  if (_AF.i >= _AF.cola.length) return _finAf();
+  var a = _AF.mapa[_AF.cola[_AF.i]];
+  if (!a) { _AF.i++; return mostrarAf(); }
+  _AF.actual = a; _AF.t0 = Date.now();
+  c.innerHTML =
+    '<div style="padding:20px 10px;text-align:center">'+
+      '<div style="font-size:0.62rem;color:var(--fg3);margin-bottom:14px">'+
+        (_AF.i+1)+' de '+_AF.cola.length+' &nbsp;·&nbsp; sale en '+a.n+' preguntas</div>'+
+      '<div style="font-size:1.05rem;font-weight:800;color:var(--fg);line-height:1.35;'+
+        'margin-bottom:20px">'+esc(a.bg)+'</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="rbtn" style="flex:1;background:#7f1d1d;color:#fff" onclick="responderAf(0)">Falsa</button>'+
+        '<button class="rbtn p" style="flex:1" onclick="responderAf(1)">Verdadera</button>'+
+      '</div>'+
+      '<div style="font-size:0.62rem;color:var(--fg3);margin-top:14px;line-height:1.5">'+
+        'Decide sin traducir. Si tienes que traducirla, ya has tardado demasiado.</div>'+
+    '</div>';
+}
+window.mostrarAf = mostrarAf;
+
+function responderAf(v) {
+  var a = _AF.actual;
+  var ms = Date.now() - _AF.t0;
+  var bien = (!!v === !!a.v);
+  if (bien) _AF.ok++;
+  BRAIN.recordLex(a.k, bien, ms, 'af', 6000);
+  document.getElementById('af-body').innerHTML =
+    '<div style="padding:20px 10px;text-align:center">'+
+      '<div style="font-size:1.35rem;font-weight:800;color:'+(bien?'#22c55e':'#ef4444')+';'+
+        'margin-bottom:8px">'+(bien?'✅ ':'❌ ')+(a.v?'VERDADERA':'FALSA')+'</div>'+
+      '<div style="font-size:0.95rem;color:var(--fg);line-height:1.35;margin-bottom:8px">'+
+        esc(a.bg)+'</div>'+
+      '<div style="font-size:0.78rem;color:var(--acc);line-height:1.35;margin-bottom:14px">'+
+        esc(a.es || '')+'</div>'+
+      '<div class="exp-b" style="text-align:left;font-size:0.68rem;color:var(--fg3);margin-bottom:14px">'+
+        'Sale en '+a.n+' preguntas del banco y en todas es '+(a.v?'correcta':'falsa')+'. '+
+        'Preguntas: '+a.ids.slice(0,6).join(', ')+(a.ids.length>6?'…':'')+'</div>'+
+      '<button class="rbtn p" style="width:100%" onclick="siguienteAf()">Siguiente</button>'+
+    '</div>';
+}
+window.responderAf = responderAf;
+
+function siguienteAf() { _AF.i++; mostrarAf(); }
+window.siguienteAf = siguienteAf;
+
+function _finAf() {
+  BRAIN.marcarBloque('afirm');
+  var e = BRAIN.estadoLex(Object.keys(_AF.mapa));
+  document.getElementById('af-body').innerHTML =
+    '<div style="padding:22px 12px;text-align:center">'+
+      '<div style="font-size:1.05rem;font-weight:800;color:var(--fg);margin-bottom:10px">'+
+        _AF.ok+' de '+_AF.cola.length+'</div>'+
+      '<div style="font-size:0.72rem;color:var(--fg2);margin-bottom:16px">'+
+        e.automatizadas+' de '+e.total+' afirmaciones fijadas</div>'+
+      _pausaHTML()+
+      '<button class="rbtn p" style="width:100%" onclick="show(\'s-reglas\')">Volver</button></div>';
+}
+window._finAf = _finAf;
+
+// ══════════════════════════════════════════════════════════════════
+// ¿CUÁNTAS HAY QUE MARCAR? · el reflejo de las multirrespuesta
+// ══════════════════════════════════════════════════════════════════
+// Marcar una casilla de menos da CERO puntos, igual que fallarlas todas.
+// 542 preguntas del banco tienen más de una correcta, y en el examen no
+// te dicen cuántas. Aquí no se contesta la pregunta: solo se decide
+// cuántas casillas pide, que es una habilidad aparte y se entrena en
+// segundos. Medido sobre el banco: con 2 opciones SIEMPRE es una sola
+// (291 de 291); con 4 opciones y «забранено» en el enunciado, son varias
+// el 92% de las veces.
+var _CUA = null;
+
+function openCuantas() {
+  if (_puertaCerrada()) { avisoPuerta(); return; }
+  if (typeof ALL === 'undefined' || !ALL.length) { toast('Banco no cargado'); return; }
+  // mezcla deliberada: la mitad de una sola y la mitad de varias, para
+  // que no se pueda acertar respondiendo siempre lo mismo
+  var una = [], varias = [];
+  ALL.forEach(function(q){
+    if (!q.a || q.a.length < 2) return;
+    var n = q.a.filter(function(a){ return a.ok; }).length;
+    (n > 1 ? varias : una).push(q);
+  });
+  var pool = BRAIN.shuffle(una).slice(0, 8).concat(BRAIN.shuffle(varias).slice(0, 8));
+  pool = BRAIN.shuffle(pool);
+  if (!pool.length) { toast('Sin preguntas disponibles'); return; }
+  _CUA = { cola: pool, i: 0, ok: 0, t0: 0 };
+  show('s-cuantas');
+  mostrarCua();
+}
+window.openCuantas = openCuantas;
+
+function mostrarCua() {
+  var c = document.getElementById('cua-body');
+  if (!c) return;
+  if (_CUA.i >= _CUA.cola.length) return _finCua();
+  var q = _CUA.cola[_CUA.i];
+  _CUA.actual = q; _CUA.t0 = Date.now();
+  var ops = q.a.map(function(a){
+    return '<div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:8px;'+
+      'padding:8px 10px;margin-bottom:6px;font-size:0.72rem;color:var(--fg2);text-align:left">'+
+      (a.t ? esc(a.t) : '🖼️ (opción con imagen)')+'</div>';
+  }).join('');
+  c.innerHTML =
+    '<div style="padding:16px 8px">'+
+      '<div style="font-size:0.62rem;color:var(--fg3);margin-bottom:10px;text-align:center">'+
+        (_CUA.i+1)+' de '+_CUA.cola.length+' &nbsp;·&nbsp; '+(q.p||1)+' pt</div>'+
+      '<div style="font-size:0.9rem;font-weight:700;color:var(--fg);line-height:1.35;'+
+        'margin-bottom:12px">'+esc(q.bg||'')+'</div>'+
+      ops+
+      '<div style="font-size:0.62rem;color:var(--fg3);margin:12px 0 8px;text-align:center">'+
+        '¿Cuántas casillas pide esta pregunta?</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="rbtn p" style="flex:1" onclick="responderCua(1)">1</button>'+
+        '<button class="rbtn p" style="flex:1" onclick="responderCua(2)">2</button>'+
+        '<button class="rbtn p" style="flex:1" onclick="responderCua(3)">3</button>'+
+      '</div>'+
+    '</div>';
+}
+window.mostrarCua = mostrarCua;
+
+function responderCua(n) {
+  var q = _CUA.actual;
+  var real = q.a.filter(function(a){ return a.ok; }).length;
+  var bien = (n === real);
+  if (bien) _CUA.ok++;
+  var pista = q.a.length === 2
+    ? 'Con solo 2 opciones nunca son varias: 291 de 291 en el banco.'
+    : (/забранено/i.test(q.bg||'') && q.a.length === 4
+        ? 'Cuatro opciones y «забранено» en el enunciado: son varias el 92% de las veces.'
+        : (/^кои/i.test((q.bg||'').trim())
+            ? '«Кои» en plural: siempre son varias.'
+            : (/\sли\s/i.test(' '+(q.bg||'')+' ')
+                ? 'Lleva «ли», es una pregunta de sí o no: una sola el 95% de las veces.'
+                : 'Con 4 opciones el reparto es 44% una, 32% dos, 23% tres. Aquí hay que leer.')));
+  var c = document.getElementById('cua-body');
+  c.innerHTML =
+    '<div style="padding:22px 10px;text-align:center">'+
+      '<div style="font-size:1.55rem;font-weight:800;color:'+(bien?'#22c55e':'#ef4444')+';'+
+        'margin-bottom:6px">'+(bien?'✅':'❌')+' '+real+'</div>'+
+      '<div style="font-size:0.78rem;color:var(--fg2);margin-bottom:14px">'+
+        (bien?'Correcto':'Eran '+real)+'</div>'+
+      '<div class="exp-b" style="text-align:left;font-size:0.68rem;color:var(--fg3);'+
+        'margin-bottom:16px">'+esc(pista)+'</div>'+
+      '<button class="rbtn p" style="width:100%" onclick="siguienteCua()">Siguiente</button>'+
+    '</div>';
+}
+window.responderCua = responderCua;
+
+function siguienteCua() { _CUA.i++; mostrarCua(); }
+window.siguienteCua = siguienteCua;
+
+function _finCua() {
+  BRAIN.marcarBloque('cuantas');
+  var pct = Math.round(_CUA.ok / _CUA.cola.length * 100);
+  document.getElementById('cua-body').innerHTML =
+    '<div style="padding:22px 12px;text-align:center">'+
+      '<div style="font-size:1.05rem;font-weight:800;color:var(--fg);margin-bottom:10px">'+
+        _CUA.ok+' de '+_CUA.cola.length+' &nbsp;('+pct+'%)</div>'+
+      '<div style="font-size:0.72rem;color:var(--fg2);margin-bottom:16px">'+
+        (pct >= 80
+          ? 'Ese reflejo ya lo tienes. En el examen no perderás puntos por marcar de menos.'
+          : 'Repásalo: en el examen, marcar una de menos vale lo mismo que fallarlas todas.')+
+      '</div>'+
+      _pausaHTML()+
+      '<button class="rbtn p" style="width:100%" onclick="show(\'s-examen\')">Volver</button></div>';
+}
+window._finCua = _finCua;
 
 // ══════════════════════════════════════════════════════════════════
 // CIFRAS DURAS · los datos que no se razonan
@@ -2213,7 +2440,7 @@ function modoVelocidad() {
   begin({
     mode:'velocidad', title:'⚡ Modo Velocidad',
     sub:'45 preg • meta <20s/preg • terminar en <15 min',
-    qs:pool, explain:false, exam:true, timed:true, timeLimit:2400
+    qs:pool, explain:false, exam:true, timed:true, timeLimit:1800
   });
 }
 window.modoVelocidad = modoVelocidad;

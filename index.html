@@ -292,6 +292,14 @@ window.onerror = function(msg, src, line, col, err) {
  <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div><div class="htitle">&#x1F524; Aprender a leer</div><div class="hsub">Reconocer, no traducir</div></div></div>
  <div class="scr"><div id="lex-body"></div></div>
 </div>
+<div id="s-afirm" class="screen">
+ <div class="hdr"><button class="back" onclick="show('s-reglas')">&#8592;</button><div><div class="htitle">&#x2696;&#xFE0F; Verdadero o falso</div><div class="hsub">La frase, no la pregunta</div></div></div>
+ <div class="scr"><div id="af-body"></div></div>
+</div>
+<div id="s-cuantas" class="screen">
+ <div class="hdr"><button class="back" onclick="show('s-examen')">&#8592;</button><div><div class="htitle">&#x2611;&#xFE0F; &iquest;Cu&aacute;ntas hay que marcar?</div><div class="hsub">Antes de responder, cu&aacute;ntas casillas</div></div></div>
+ <div class="scr"><div id="cua-body"></div></div>
+</div>
 <div id="s-cifras" class="screen">
  <div class="hdr"><button class="back" onclick="show('s-reglas')">&#8592;</button><div><div class="htitle">&#x1F522; Cifras duras</div><div class="hsub">Datos que no se razonan: se saben</div></div></div>
  <div class="scr"><div id="cif-body"></div></div>
@@ -304,6 +312,10 @@ window.onerror = function(msg, src, line, col, err) {
    <button class="card hi full" onclick="mod('prueba')"><span class="ci">&#x1F4CF;</span><span class="ct">Prueba patr&oacute;n semanal</span><span class="cd">45 preg &bull; 97 pts &bull; misma estructura cada semana, para comparar</span></button>
    <button class="card hi" onclick="mod('realexam')"><span class="ci">&#x1F4CB;</span><span class="ct">Simulacro real</span><span class="cd">Con feedback &bull; distribuci&oacute;n del examen</span></button>
    <button class="card hi" onclick="mod('examdry')"><span class="ci">&#x1F393;</span><span class="ct">Examen seco</span><span class="cd">Sin feedback &bull; condiciones reales</span></button>
+  </div>
+  <div class="sec-lbl">Entrenar la t&eacute;cnica</div>
+  <div class="grid">
+   <button class="card hi full" onclick="openCuantas()"><span class="ci">&#x2611;&#xFE0F;</span><span class="ct">&iquest;Cu&aacute;ntas hay que marcar?</span><span class="cd">Marcar una de menos vale cero puntos. Entrena el reflejo antes de leer</span></button>
   </div>
   <div class="sec-lbl">Entrenar velocidad</div>
   <div class="grid">
@@ -322,6 +334,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="grid">
    <button class="card hi full" onclick="openLex()" style="border-color:var(--acc)"><span class="ci">&#x1F524;</span><span class="ct">Aprender a leer</span><span class="cd">El b&uacute;lgaro que necesitas para el examen</span></button>
    <button class="card hi full" onclick="openLeyes()"><span class="ci">&#x1F4D6;</span><span class="ct">Leyes y casos</span><span class="cd">Las reglas explicadas, con im&aacute;genes y m&eacute;todo</span></button>
+   <button class="card hi full" onclick="openAfirm()"><span class="ci">&#x2696;&#xFE0F;</span><span class="ct">Verdadero o falso</span><span class="cd">258 frases que no cambian de veredicto salgan en la pregunta que salgan</span></button>
    <button class="card hi full" onclick="openCifras()"><span class="ci">&#x1F522;</span><span class="ct">Cifras duras</span><span class="cd">Los datos que no se deducen: metros, plazos y porcentajes</span></button>
    <button class="card hi full" onclick="mod('pares')"><span class="ci">&#x1F3AD;</span><span class="ct">Pares trampa</span><span class="cd">Mismo texto y mismas opciones, distinta respuesta</span></button>
    <button class="card hi" onclick="openConfusiones()"><span class="ci">&#x1F500;</span><span class="ct">Confusiones</span><span class="cd">Lo que fallas siempre igual</span></button>
