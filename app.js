@@ -608,7 +608,31 @@ function mod(m) {
 // ── SESION ────────────────────────────────────
 var S=null, TIMER=null, EXAM_LOG=[], _qStart=0;
 
+// ── CANDADO DE LA ETAPA A ─────────────────────────────────────────
+// A las preguntas se entra por seis sitios distintos —mod(), los sets,
+// modo velocidad, repaso nocturno, señales visuales y el repaso de
+// falladas— y los seis terminan en begin(). Cerrar aquí es lo único que
+// no deja agujeros. No depende del modo guiado a propósito: ese
+// interruptor reordena el día, no autoriza a estudiar lo que todavía no
+// se sabe leer. Si algo falla al consultarlo, se abre: un error de carga
+// no puede dejar la app entera cerrada.
+function _puertaCerrada() {
+  try { var e = AGENTS.etapaA(); return !!(e && e.activa); }
+  catch (err) { return false; }
+}
+window._puertaCerrada = _puertaCerrada;
+
+function avisoPuerta() {
+  var falta = 0;
+  try { var e = AGENTS.etapaA(); if (e && e.puerta) falta = e.puerta.total - e.puerta.automatizadas; }
+  catch (err) {}
+  toast('🔒 Primero leer' + (falta ? ': faltan ' + falta + ' claves' : ''));
+  try { openMisionDia(); } catch (err) { show('home'); }
+}
+window.avisoPuerta = avisoPuerta;
+
 function begin(opts) {
+  if (_puertaCerrada()) { avisoPuerta(); return; }
   if (TIMER) { clearInterval(TIMER); TIMER=null; }
   S = Object.assign({}, opts, {
     idx:0, score:0, ok:0, ko:0, t0:Date.now(),
@@ -787,6 +811,14 @@ function renderQ() {
 // mas y fija mejor.
 var _LEX = null;
 
+// El umbral vive en brain.js. Aquí solo se lee: si la pantalla dijera
+// una cifra y el cerebro contara con otra, el contador mentiría y no se
+// notaría hasta mucho después.
+function _umbralLex() {
+  try { return BRAIN.umbralLex(); } catch (e) { return 3000; }
+}
+function _umbralSegs() { return Math.round(_umbralLex() / 1000); }
+
 function _lexPorClave(k) {
   var r = null;
   if (typeof LEX_PARES !== 'undefined') LEX_PARES.forEach(function(p){
@@ -831,7 +863,7 @@ function mostrarLex() {
       '<button class="rbtn p" style="width:100%;max-width:320px" onclick="revelarLex()">Ver respuesta</button>'+
       '<div style="font-size:11px;color:var(--fg3);margin-top:14px;line-height:1.5">'+
         'Responde mentalmente ANTES de destapar. Solo cuenta si lo reconoces '+
-        'en menos de 2 segundos.</div>'+
+        'en menos de '+_umbralSegs()+' segundos.</div>'+
     '</div>';
 }
 window.mostrarLex = mostrarLex;
@@ -841,14 +873,15 @@ function revelarLex() {
   var e = _LEX.actual;
   var c = document.getElementById('lex-body');
   var resp = _LEX.dir === 'bg2es' ? e.es : e.bg;
-  var col = ms <= 2000 ? '#22c55e' : ms <= 4000 ? '#eab308' : '#ef4444';
+  var U = _umbralLex();
+  var col = ms <= U ? '#22c55e' : ms <= U * 1.7 ? '#eab308' : '#ef4444';
   _LEX.ms = ms;
   c.innerHTML =
     '<div style="text-align:center;padding:20px 8px">'+
       '<div style="font-size:26px;font-weight:800;color:var(--acc);margin-bottom:6px;'+
         'word-break:break-word">'+esc(resp)+'</div>'+
       '<div style="font-size:13px;color:'+col+';font-weight:700;margin-bottom:16px">'+
-        (ms/1000).toFixed(1)+' s'+(ms<=2000?' · automático':' · aún estás traduciendo')+'</div>'+
+        (ms/1000).toFixed(1)+' s'+(ms<=U?' · automático':' · aún estás traduciendo')+'</div>'+
       (e.op ? '<div style="background:rgba(239,68,68,.10);border:1px solid #ef4444;border-radius:8px;'+
         'padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--fg2)">'+
         'No lo confundas con <b>'+esc(e.op.bg)+'</b> = '+esc(e.op.es)+'</div>' : '')+
@@ -883,15 +916,22 @@ function _finLex() {
   c.innerHTML = '<div style="padding:22px 12px;text-align:center">'+
     '<div style="font-size:20px;font-weight:800;color:var(--fg);margin-bottom:10px">Sesión terminada</div>'+
     '<div style="font-size:14px;color:var(--fg2);margin-bottom:16px">'+
-      _LEX.rapidas+' de '+_LEX.cola.length+' reconocidas en menos de 2 segundos</div>'+
+      _LEX.rapidas+' de '+_LEX.cola.length+' reconocidas en menos de '+_umbralSegs()+' segundos</div>'+
     '<div style="background:var(--bg2);border-radius:10px;padding:12px 14px;text-align:left;'+
       'font-size:12px;color:var(--fg3);line-height:1.6;margin-bottom:16px">'+
-      'Palabras decisivas automatizadas: <b>'+e.decisivas.automatizadas+' de '+e.decisivas.total+'</b><br>'+
-      'Léxico total: <b>'+e.todo.automatizadas+' de '+e.todo.total+'</b><br>'+
-      (e.superada
-        ? 'Ya puedes leer el examen. La Etapa A está superada.'
-        : 'Para pasar a las preguntas: todas las decisivas y el 70% del resto.')+
+      (e.puerta
+        ? 'Claves de la puerta: <b>'+e.puerta.automatizadas+' de '+e.puerta.total+'</b><br>' : '')+
+      'Palabras decisivas: <b>'+e.decisivas.automatizadas+' de '+e.decisivas.total+'</b><br>'+
+      'Léxico entero: <b>'+e.todo.automatizadas+' de '+e.todo.total+'</b><br>'+
+      (e.abierta
+        ? (e.superada
+            ? 'Léxico terminado. Ya lees el examen entero sin muleta.'
+            : 'Las preguntas están abiertas. El léxico sigue cada día hasta terminarlo.')
+        : 'Faltan '+(e.puerta.total - e.puerta.automatizadas)+' claves para abrir las preguntas. '+
+          'Cada una necesita 3 aciertos rápidos en días distintos: es el espaciado, no la prisa, '+
+          'lo que las fija.')+
     '</div>'+
+    _pausaHTML()+
     '<button class="rbtn p" style="width:100%" onclick="show(\'home\')">Volver</button></div>';
 }
 
@@ -915,6 +955,134 @@ function openLex() {
   mostrarLex();
 }
 window.openLex = openLex;
+
+// ══════════════════════════════════════════════════════════════════
+// CIFRAS DURAS · los datos que no se razonan
+// ══════════════════════════════════════════════════════════════════
+// Metros, plazos y porcentajes son arbitrarios: no hay lógica que los
+// deduzca, o se saben o se fallan. Están repartidos por 38 preguntas y
+// se repiten entre ellas, así que 16 tarjetas los cubren. Reutiliza el
+// motor de repetición espaciada del léxico con claves 'cif:', que no
+// entran en el recuento de la Etapa A ni tocan la puerta.
+// Va abierto durante la Etapa A a propósito: es teoría, no práctica de
+// preguntas, y es lo que se puede hacer los días en que el léxico ya
+// está al día.
+var _CIF = null;
+var CIF_MS = 6000;   // recordar un dato admite más tiempo que reconocer una palabra
+
+function _cifClaves() {
+  if (typeof CIFRAS === 'undefined') return [];
+  return CIFRAS.map(function(c){ return c.k; });
+}
+function _cifPorClave(k) {
+  if (typeof CIFRAS === 'undefined') return null;
+  var r = null;
+  CIFRAS.forEach(function(c){ if (c.k === k) r = c; });
+  return r;
+}
+
+function openCifras() {
+  if (typeof CIFRAS === 'undefined') {
+    toast('Falta data-cifras.js: súbelo junto a los demás ficheros');
+    return;
+  }
+  var claves = _cifClaves();
+  if (!claves.length) { toast('El mazo de cifras está vacío'); return; }
+  var cola = BRAIN.colaLex(claves, 12);
+  if (!cola.length) { toast('Cifras al día: vuelve mañana'); return; }
+  _CIF = { cola: cola, i: 0, ok: 0, rapidas: 0, t0: 0, ms: 0 };
+  show('s-cifras');
+  mostrarCif();
+}
+window.openCifras = openCifras;
+
+function mostrarCif() {
+  var c = document.getElementById('cif-body');
+  if (!c) return;
+  if (_CIF.i >= _CIF.cola.length) return _finCif();
+  var e = _cifPorClave(_CIF.cola[_CIF.i]);
+  if (!e) { _CIF.i++; return mostrarCif(); }
+  _CIF.actual = e;
+  _CIF.t0 = Date.now();
+  c.innerHTML =
+    '<div style="text-align:center;padding:24px 8px">'+
+      '<div style="font-size:12px;color:var(--fg3);margin-bottom:14px">'+esc(e.t)+
+        ' &nbsp;·&nbsp; '+(_CIF.i+1)+' de '+_CIF.cola.length+'</div>'+
+      (e.img ? '<img src="'+e.img+'" alt="Señal de la pregunta" loading="lazy" '+
+        'style="max-width:170px;width:60%;border-radius:8px;background:#fff;'+
+        'margin-bottom:14px" onerror="this.style.display=\'none\'">' : '')+
+      '<div style="font-size:22px;font-weight:800;color:var(--fg);line-height:1.35;'+
+        'margin-bottom:22px">'+esc(e.q)+'</div>'+
+      '<button class="rbtn p" style="width:100%;max-width:320px" onclick="revelarCif()">Ver respuesta</button>'+
+      '<div style="font-size:11px;color:var(--fg3);margin-top:14px;line-height:1.5">'+
+        'Di la cifra en voz alta antes de destapar. Si son dos números, hacen falta los dos.</div>'+
+    '</div>';
+}
+window.mostrarCif = mostrarCif;
+
+function revelarCif() {
+  var ms = Date.now() - _CIF.t0;
+  var e = _CIF.actual;
+  _CIF.ms = ms;
+  var col = ms <= CIF_MS ? '#22c55e' : '#eab308';
+  document.getElementById('cif-body').innerHTML =
+    '<div style="text-align:center;padding:20px 8px">'+
+      (e.img ? '<img src="'+e.img+'" alt="Señal de la pregunta" loading="lazy" '+
+        'style="max-width:120px;width:45%;border-radius:8px;background:#fff;'+
+        'margin-bottom:10px" onerror="this.style.display=\'none\'">' : '')+
+      '<div style="font-size:20px;font-weight:800;color:var(--acc);margin-bottom:6px;'+
+        'line-height:1.35">'+esc(e.r)+'</div>'+
+      '<div style="font-size:13px;color:'+col+';font-weight:700;margin-bottom:14px">'+
+        (ms/1000).toFixed(1)+' s</div>'+
+      '<div style="background:var(--bg2);border-radius:8px;padding:10px 12px;'+
+        'margin-bottom:12px;text-align:left">'+
+        '<div style="font-size:11px;color:var(--fg3);margin-bottom:4px">Así aparece en el examen:</div>'+
+        '<div style="font-size:14px;color:var(--fg);line-height:1.4">'+esc(e.bg)+'</div>'+
+        '<div style="font-size:12px;color:var(--acc);line-height:1.4">'+esc(e.bges)+'</div></div>'+
+      (e.nota ? '<div class="exp-b" style="text-align:left;font-size:12px;color:var(--fg3);'+
+        'margin-bottom:14px">'+esc(e.nota)+'</div>' : '')+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="rbtn" style="flex:1;background:#7f1d1d;color:#fff" onclick="calificarCif(0)">No la sabía</button>'+
+        '<button class="rbtn p" style="flex:1" onclick="calificarCif(1)">La sabía</button>'+
+      '</div>'+
+    '</div>';
+}
+window.revelarCif = revelarCif;
+
+function calificarCif(ok) {
+  var res = BRAIN.recordLex(_CIF.actual.k, !!ok, _CIF.ms, 'cif', CIF_MS);
+  if (ok && res.rapido) _CIF.rapidas++;
+  if (ok) _CIF.ok++;
+  _CIF.i++;
+  mostrarCif();
+}
+window.calificarCif = calificarCif;
+
+function _finCif() {
+  BRAIN.marcarBloque('cifras');
+  var e = BRAIN.estadoLex(_cifClaves());
+  document.getElementById('cif-body').innerHTML =
+    '<div style="padding:22px 12px;text-align:center">'+
+      '<div style="font-size:20px;font-weight:800;color:var(--fg);margin-bottom:10px">Sesión terminada</div>'+
+      '<div style="font-size:14px;color:var(--fg2);margin-bottom:16px">'+
+        _CIF.ok+' de '+_CIF.cola.length+' acertadas &nbsp;·&nbsp; '+
+        e.automatizadas+' de '+e.total+' cifras fijadas</div>'+
+      _pausaHTML()+
+      '<button class="rbtn p" style="width:100%" onclick="show(\'s-reglas\')">Volver</button></div>';
+}
+window._finCif = _finCif;
+
+// Aviso de consolidación. La memoria pasa a largo plazo en las pausas y
+// durante el sueño, no mientras sigues metiendo información. Es un
+// empujón, no una promesa: los 15 minutos son regla práctica, no una
+// cifra medida.
+function _pausaHTML() {
+  return '<div style="background:rgba(59,130,246,.10);border:1px solid #3b82f6;border-radius:10px;'+
+    'padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--fg2);line-height:1.5;text-align:left">'+
+    '\uD83E\uDDE0 <b>Ahora no abras nada.</b> Lo que acabas de estudiar se fija en la pausa, no '+
+    'mientras sigues leyendo. Quince minutos sin pantalla, o directamente a dormir, valen más '+
+    'que otra sesión seguida.</div>';
+}
 
 // ── Presupuesto de tiempo del dia ────────────────────────────────
 // Declarar cuantos minutos tienes cambia QUE bloques entran, no solo el
@@ -941,42 +1109,74 @@ window.setPresupuesto = setPresupuesto;
 // precisamente el trabajo del entrenador.
 function _guiadoOn() { return localStorage.getItem('guiado_off') !== '1'; }
 
+// CARRIL ÚNICO. Abierto solo el modo del paso que toca AHORA, no los
+// cuatro bloques del día. El plan es una secuencia: mientras el paso 2
+// esté por delante, abrirlo es saltarse el orden que lo hace funcionar.
+// Con el día cerrado se devuelve null y se abre todo: ya ha hecho lo
+// que tocaba, y de ahí en adelante manda él. Con la Etapa A activa no,
+// porque cerrar el día leyendo no desbloquea preguntas.
 function _modosPermitidos() {
   var permitidos = {};
   try {
-    var plan = AGENTS.planDia(ALL, VIDS);
-    plan.bloques.forEach(function(b){
-      if (b.hecho) return;                       // lo hecho ya no hace falta
-      var m = (b.fn.match(/mod\('([^']+)'\)/)||[])[1];
-      if (m) permitidos[m] = b.t;
-    });
-    // si el dia esta cerrado, se abre todo: ya ha hecho lo que tocaba
-    if (plan.cerrado) return null;
+    var p = AGENTS.pasoActual(ALL, VIDS, _presupuestoHoy());
+    if (!p.bloque) return p.plan && p.plan.etapaA ? permitidos : null;
+    var m = ((p.bloque.fn || '').match(/mod\('([^']+)'\)/) || [])[1];
+    if (m) permitidos[m] = p.bloque.t;
   } catch(e) { return null; }
-  // siempre accesibles: consulta, no practica
-  ['flash','banco'].forEach(function(m){ permitidos[m] = 1; });
   return permitidos;
 }
 
+// Botones que abren preguntas sin pasar por mod(). Con el candado
+// echado hay que marcarlos igual: un botón que se pulsa y no hace nada
+// parece una avería, no un candado.
+var _ABRE_PREGUNTAS = ['modoVelocidad(', 'modoNocturno(', 'modoSe\u00f1alesVisual(',
+                       'startSet(', 'startCorrectiveFeedback(', 'openSearch('];
+
 function aplicarModoGuiado() {
   var permitidos = _guiadoOn() ? _modosPermitidos() : null;
-  document.querySelectorAll('[onclick^="mod("]').forEach(function(btn){
-    var m = (btn.getAttribute('onclick')||'').match(/mod\('([^']+)'\)/);
-    if (!m) return;
-    var modo = m[1];
+  var cerrada = _puertaCerrada();
+  document.querySelectorAll('[onclick]').forEach(function(btn){
+    var oc = btn.getAttribute('onclick') || '';
+    var m = oc.match(/^mod\('([^']+)'\)/);
+    var otro = _ABRE_PREGUNTAS.some(function(pre){ return oc.indexOf(pre) === 0; });
+    if (!m && !otro) return;
+    var modo = m ? m[1] : null;
+    // siempre se parte de limpio: si no, un botón desbloqueado ayer se
+    // queda gris para siempre
     btn.classList.remove('bloq');
     var cd = btn.querySelector('.cd');
     if (cd && btn.dataset.cdOrig) { cd.textContent = btn.dataset.cdOrig; }
-    if (!permitidos) return;
-    if (permitidos[modo]) return;
+    var bloq;
+    if (cerrada)          bloq = (modo !== 'lex');
+    else if (otro)        bloq = false;      // fuera de la Etapa A, como antes
+    else if (!permitidos) bloq = false;
+    else                  bloq = !permitidos[modo];
+    if (!bloq) return;
     btn.classList.add('bloq');
     if (cd) {
       if (!btn.dataset.cdOrig) btn.dataset.cdOrig = cd.textContent;
-      cd.textContent = '🔒 Hoy no toca';
+      cd.textContent = cerrada ? '🔒 Primero, aprender a leer' : '🔒 Hoy no toca';
     }
   });
   var av = document.getElementById('guiado-aviso');
-  if (av) av.style.display = (permitidos ? '' : 'none');
+  if (av) {
+    // guardar el texto original ANTES de pisarlo: si el primer render ya
+    // es con el candado echado y no se guarda aquí, al abrir la puerta el
+    // aviso se queda contando un candado que ya no existe
+    if (!av.dataset.orig) av.dataset.orig = av.innerHTML;
+    av.style.display = ((permitidos || cerrada) ? '' : 'none');
+    if (cerrada) {
+      var falta = 0;
+      try { var eG = AGENTS.etapaA(); if (eG && eG.puerta) falta = eG.puerta.total - eG.puerta.automatizadas; }
+      catch (e) {}
+      av.innerHTML = '\uD83D\uDD12 <b>Etapa A: primero, aprender a leer.</b> Las preguntas est\u00e1n ' +
+        'cerradas hasta que reconozcas las claves que abren la puerta' +
+        (falta ? ' (faltan ' + falta + ')' : '') + '. Mientras tanto: l\u00e9xico y leyes. ' +
+        'Este candado no lo levanta el interruptor de Ajustes.';
+    } else {
+      av.innerHTML = av.dataset.orig;
+    }
+  }
 }
 window.aplicarModoGuiado = aplicarModoGuiado;
 
@@ -992,6 +1192,10 @@ window.toggleGuiado = toggleGuiado;
 // intercepta mod() cuando el modo esta bloqueado
 var _modOrig = null;
 function _modGuard(m) {
+  // Con la puerta cerrada solo pasa el léxico. Las excepciones de abajo
+  // (secciones, familias, pares, destete) abren preguntas: valen dentro
+  // del modo guiado, no contra el candado.
+  if (m !== 'lex' && _puertaCerrada()) { avisoPuerta(); return; }
   var permitidos = _guiadoOn() ? _modosPermitidos() : null;
   if (permitidos && !permitidos[m] && String(m).indexOf('sec_') !== 0 && String(m).indexOf('fam_') !== 0 && m !== 'pares' && m !== 'destete' && m !== 'lex') {
     var sig = AGENTS.planDia(ALL, VIDS).bloques.filter(function(b){return !b.hecho;})[0];
@@ -1721,6 +1925,13 @@ window.stopPodcast = function(){
 };
 
 // ── MISIÓN DEL DÍA ────────────────────────────────────────────────
+function saltarPaso(id) {
+  try { BRAIN.marcarBloque(id); } catch(e) {}
+  toast('Paso saltado. Queda registrado como no hecho hoy.');
+  openMisionDia();
+}
+window.saltarPaso = saltarPaso;
+
 function openMisionDia() {
   try { BRAIN.fotoDelDia(ALL); } catch(e) {}
   var panel = document.getElementById('mision-panel');
@@ -1813,21 +2024,44 @@ function openMisionDia() {
        plan.hechos+' de '+plan.total+' bloques · '+
        (plan.cerrado?'nada pendiente':'~'+plan.minutos+' min restantes')+'</div>';
 
-  // ── bloques
+  // ── bloques. Solo el paso de ahora se puede pulsar: los siguientes
+  // se ven, para saber qué viene, pero no se abren hasta su turno.
+  var _pasoAct = null;
+  try { _pasoAct = AGENTS.pasoActual(ALL, VIDS, presAct); } catch(e) {}
+  var _idAct = _pasoAct && _pasoAct.bloque ? _pasoAct.bloque.id : null;
+  var _n = 0;
   plan.bloques.forEach(function(b){
-    var op = b.hecho ? 'opacity:.45;' : (b.cabe === false ? 'opacity:.35;' : '');
-    h += '<button onclick="'+(b.hecho?'':b.fn)+'" style="display:block;width:100%;text-align:left;'+op+
-      'background:var(--bg2);border:1px solid '+(b.hecho?'var(--bg4)':'var(--acc)')+';'+
-      'border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">'+
+    var esAhora = (b.id === _idAct);
+    if (b.cabe !== false) _n++;
+    var esperando = !b.hecho && !esAhora && b.cabe !== false;
+    var op = b.hecho ? 'opacity:.45;' : (b.cabe === false ? 'opacity:.35;' : (esperando ? 'opacity:.5;' : ''));
+    var borde = esAhora ? 'var(--acc)' : 'var(--bg4)';
+    var icono = b.hecho ? '✅' : (b.cabe === false ? '⏳' : (esperando ? '🔒' : b.emoji));
+    h += '<button onclick="'+(esAhora ? b.fn : '')+'" style="display:block;width:100%;text-align:left;'+op+
+      'background:var(--bg2);border:'+(esAhora?'2px':'1px')+' solid '+borde+';'+
+      'border-radius:10px;padding:12px 14px;margin-bottom:'+(esAhora?'4px':'8px')+';cursor:'+(esAhora?'pointer':'default')+'">'+
       '<div style="display:flex;gap:10px;align-items:center">'+
-        '<div style="font-size:22px">'+(b.hecho?'✅':(b.cabe===false?'⏳':b.emoji))+'</div>'+
+        '<div style="font-size:22px">'+icono+'</div>'+
         '<div style="flex:1">'+
-          '<div style="font-size:14px;font-weight:700;color:var(--fg)">'+b.t+'</div>'+
-          '<div style="font-size:12px;color:'+(b.cabe===false?'var(--fg3)':'var(--acc)')+';font-weight:600">'+
-            b.detalle+' · ~'+b.min+' min'+(b.cabe===false?' · no cabe hoy':'')+'</div>'+
+          '<div style="font-size:14px;font-weight:700;color:var(--fg)">'+
+            (b.cabe===false?'':'Paso '+_n+' · ')+b.t+'</div>'+
+          '<div style="font-size:12px;color:'+(esAhora?'var(--acc)':'var(--fg3)')+';font-weight:600">'+
+            b.detalle+' · ~'+b.min+' min'+(b.cabe===false?' · no cabe hoy':'')+
+            (esperando?' · después de este':'')+'</div>'+
         '</div></div>'+
-      '<div style="font-size:11px;color:var(--fg3);margin-top:6px;line-height:1.5">'+b.porque+'</div>'+
+      (esAhora || b.hecho
+        ? '<div style="font-size:11px;color:var(--fg3);margin-top:6px;line-height:1.5">'+b.porque+'</div>'
+        : '')+
       '</button>';
+    // Válvula de escape: si un paso no se puede hacer (por ejemplo, no
+    // queda nada vencido que repasar), sin esto el día entero se queda
+    // atascado en él. Se salta a mano y queda registrado como saltado.
+    if (esAhora) {
+      h += '<div style="text-align:right;margin-bottom:10px">'+
+        '<button onclick="saltarPaso(\''+b.id+'\')" style="background:none;border:none;'+
+        'color:var(--fg3);font-size:11px;text-decoration:underline;cursor:pointer;padding:4px 2px">'+
+        'No puedo con este ahora · saltar</button></div>';
+    }
   });
 
   if (plan.cerrado) {
@@ -2053,7 +2287,7 @@ function verLeyes(tipo) {
     '<button class="sett-btn" style="flex:0 0 auto;margin-top:0;background:var(--bg3);color:var(--fg)" onclick="pararLey()">\u23f9\ufe0f</button></div>';
   for (var i = 0; i < arr.length; i++) {
     var L = arr[i];
-    html += '<div class="sett-row"' + (tipo === 'casos' ? ' id="caso-' + L.id + '"' : '') + '>' +
+    html += '<div class="sett-row" id="' + (tipo === 'casos' ? 'caso-' : 'ley-') + L.id + '">' +
       '<div style="display:flex;align-items:flex-start;gap:8px">' +
       '<div style="flex:1"><div class="sett-lbl">' + L.t + '</div>' +
       '<div class="sett-sub" style="margin-bottom:0">' +
@@ -2071,7 +2305,7 @@ function verLeyes(tipo) {
           '<div class="exp-b" style="margin-top:6px">' + im.a + '</div></div>';
       }
     }
-    if (tipo === 'casos') {
+    {
       var leida = BRAIN.leyLeida(L.id);
       var d = BRAIN.diasDesdeLey(L.id);
       html += '<button class="sett-btn" style="margin-top:10px;width:100%;' +
@@ -2093,11 +2327,16 @@ function verLeyes(tipo) {
 function openLeyes() { show('s-leyes'); verLeyes(_leyVista); }
 
 // Abre la seccion Leyes directamente en un caso y lo desplaza a la vista.
-function abrirLey(idCaso) {
+function abrirLey(id) {
+  // Sirve para las dos cosas: un caso (una escena) o una ley (el
+  // principio). El Profesor manda un id y aquí se decide en qué pestaña
+  // está, en vez de obligarle a saberlo.
+  var esLey = (typeof LEYES !== 'undefined') &&
+    LEYES.some(function(l){ return l.id === id; });
   show('s-leyes');
-  verLeyes('casos');
+  verLeyes(esLey ? 'leyes' : 'casos');
   setTimeout(function(){
-    var el = document.getElementById('caso-' + idCaso);
+    var el = document.getElementById((esLey ? 'ley-' : 'caso-') + id);
     if (el) {
       el.scrollIntoView({behavior:'smooth', block:'start'});
       el.style.borderColor = 'var(--acc)';
@@ -2107,11 +2346,13 @@ function abrirLey(idCaso) {
 window.abrirLey = abrirLey;
 
 // Marca la ley como estudiada y cierra el bloque del plan de hoy.
-function leyEstudiada(idCaso) {
-  BRAIN.marcarLeyLeida(idCaso);
+function leyEstudiada(id) {
+  BRAIN.marcarLeyLeida(id);
   BRAIN.marcarBloque('ley');
-  toast('📖 Ley marcada como estudiada');
-  verLeyes('casos');
+  toast('📖 Marcada como estudiada');
+  var esLey = (typeof LEYES !== 'undefined') &&
+    LEYES.some(function(l){ return l.id === id; });
+  verLeyes(esLey ? 'leyes' : 'casos');
 }
 window.leyEstudiada = leyEstudiada;
 function openAjustes() { show('s-sett'); actualizarBotonInstalar(); }

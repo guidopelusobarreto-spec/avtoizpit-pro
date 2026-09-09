@@ -35,94 +35,86 @@ var AGENTS = (function() {
   };
 
   // ─── AGENTE 1: Coach Máxima Puntuación ───────────────────────────
+  // ── EL PASO DE AHORA ──────────────────────────────────────────────
+  // El plan del día es una SECUENCIA, no un menú. Esta función devuelve
+  // el único bloque que toca ahora: el primero sin hacer que cabe en el
+  // tiempo declarado. Todo lo demás se cierra hasta que este se termine.
+  // Elegir entre cuatro botones devuelve la decisión a quien todavía no
+  // sabe qué le conviene, que es justo lo que este modo evita.
+  function pasoActual(all, vids, presupuesto) {
+    var plan = planDia(all || [], vids || [], presupuesto || null);
+    var caben = plan.bloques.filter(function(x){ return x.cabe !== false; });
+    var pend  = caben.filter(function(x){ return !x.hecho; });
+    var hechos = caben.filter(function(x){ return x.hecho; }).length;
+    return {
+      bloque: pend.length ? pend[0] : null,
+      paso: hechos + 1,
+      total: caben.length,
+      cerrado: !pend.length,
+      plan: plan
+    };
+  }
+
+  function _recorta(t, n) {
+    t = String(t || '');
+    if (t.length <= n) return t;
+    var corte = t.slice(0, n);
+    var p = corte.lastIndexOf('. ');
+    return (p > 40 ? corte.slice(0, p + 1) : corte.trim() + '…');
+  }
+
+  function _presupuestoDeHoy() {
+    try { if (typeof _presupuestoHoy === 'function') return _presupuestoHoy(); }
+    catch (e) {}
+    return null;
+  }
+
   function runCoach(onResult) {
     var m = BRAIN.getMetrics();
     var s = BRAIN.get();
     var prediction = BRAIN.predictReadyDate();
-    var patterns = detectPatterns();
-    var msg='', acts=[], urgency='normal';
-
-    var h = new Date().getHours();
-    var saludo;
-    if(h<6) saludo='Madrugador';
-    else if(h<12) saludo='Buenos días';
-    else if(h<19) saludo='Buenas tardes';
-    else saludo='Buenas noches';
-
-    // Detectar fase actual del usuario
     var fase = _detectarFaseActual(s);
 
-    // ALERTA REGRESIÓN — máxima prioridad
-    if (m.regression) {
-      urgency='high';
-      msg='📉 Bajada detectada en últimas sesiones. SRS urgente ahora — recuperas en 15 min.';
-      acts=[{t:'🔄 SRS Urgente', fn:"mod('srs')"},{t:'🎯 Fase '+fase, fn:"mod('fase"+fase+"')"}];
+    var h = new Date().getHours();
+    var saludo = h < 6 ? 'Madrugador' : h < 12 ? 'Buenos días'
+               : h < 19 ? 'Buenas tardes' : 'Buenas noches';
 
-    } else if (m.due >= 10) {
-      urgency='high';
-      msg='⏰ '+m.due+' repasos SRS. La neurociencia: repasar HOY vale 3× más que mañana.';
-      acts=[{t:'🔄 SRS ('+m.due+')', fn:"mod('srs')"},{t:'📋 Examen Seco', fn:"mod('examdry')"}];
+    var eA = etapaA();
+    var p = pasoActual(typeof ALL !== 'undefined' ? ALL : [],
+                       typeof VIDS !== 'undefined' ? VIDS : [],
+                       _presupuestoDeHoy());
 
-    } else if (!m.seen) {
-      // Primera vez
-      urgency='high';
-      msg=saludo+'! Meta: 97/97 pts, terminar en <20 min. '+
-        'Empezamos por las 8 preguntas casi-seguras — salen en 1 de cada 4 exámenes. '+
-        'Son señales (R3). 5 minutos hoy las cambia todo.';
-      acts=[{t:'🎯 F1: 8 Casi-Seguras', fn:"mod('fase1')"},{t:'📋 Simulacro Real', fn:"mod('realexam')"}];
-
-    } else if (fase === 1) {
-      // Estudiando F1
-      var f1done = BRAIN.countDominated(IDS_FASE1);
-      if(f1done < IDS_FASE1.length) {
-        msg='🎯 Fase 1 en progreso: '+f1done+'/8 casi-seguras dominadas. '+
-          'Cada una que dominas vale 2pt garantizados en el examen. Quedan '+(IDS_FASE1.length-f1done)+'.';
-        acts=[{t:'🎯 F1: Casi-Seguras', fn:"mod('fase1')"},{t:'🎬 F2: Videos', fn:"mod('videocrit')"}];
-      } else {
-        urgency='normal';
-        msg='✅ F1 completada — las 8 casi-seguras dominadas (+4pts seguros). '+
-          'Ahora los 20 videos críticos. Son 3pts cada uno y ahorran 2 minutos en el examen real.';
-        acts=[{t:'🎬 F2: Videos Críticos', fn:"mod('videocrit')"},{t:'💎 F3: 3 Puntos', fn:"mod('pts3')"}];
-      }
-
-    } else if (fase === 2) {
-      var vidsDone = _countVideoDominados(s);
-      msg='🎬 Fase 2 — Videos: '+vidsDone+'/20 dominados. '+
-        'Los videos son 3pt y aparecen SIEMPRE exactamente 2 en el examen. '+
-        'Si los dominas, resuelves cada video en 5s en lugar de 60s.';
-      acts=[{t:'🎬 Videos Críticos', fn:"mod('videocrit')"},{t:'🎯 Fase 1 repaso', fn:"mod('fase1')"}];
-
-    } else if (fase === 3) {
-      var pts3done = _countPts3Dominados(s);
-      var pts3pct = m.p3pct;
-      msg='💎 Fase 3 — '+pts3done+' preg de 3pt dominadas ('+pts3pct+'%). '+
-        'Son el 47% de los puntos del examen. '+
-        'Con 360 dominadas tienes 53/97 pts seguros.';
-      acts=[{t:'💎 3 Puntos SRS', fn:"mod('pts3')"},{t:'📋 Simulacro Real', fn:"mod('realexam')"}];
-
-    } else if (m.avgRealPts > 0 && m.avgRealPts < 90) {
-      urgency='medium';
-      var gap = 90 - m.avgRealPts;
-      msg='📊 Simulacros: '+m.avgRealPts+'% media. Faltan '+gap+'pts para el 90% estable. '+
-        'Sección más débil: '+(patterns.worstSection?'R'+patterns.worstSection:'en análisis')+'. '+
-        'Examen seco esta semana para medir tiempo real.';
-      acts=[{t:'📋 Examen Seco', fn:"mod('examdry')"},{t:'🧠 Adaptativo', fn:"mod('adaptive')"}];
-
-    } else if (m.avgRealPts >= 90) {
-      msg='🏆 '+m.avgRealPts+'% media en simulacros. '+
-        '¿Terminas en menos de 20 minutos? Cronometra el próximo examen seco.';
-      acts=[{t:'📋 Examen Seco Cronometrado', fn:"mod('examdry')"},{t:'⚡ Última Hora', fn:"mod('ultimahora')"}];
-
-    } else {
-      msg=saludo+'! '+_getTip()+' Hoy: '+FASE_INFO[fase].emoji+' '+FASE_INFO[fase].n+'.';
-      acts=[{t:FASE_INFO[fase].emoji+' '+FASE_INFO[fase].n, fn:"mod('fase"+fase+"')"},{t:'📋 Simulacro', fn:"mod('realexam')"}];
+    // Día cerrado. No se ofrece «algo más»: seguir ahora rinde menos que
+    // dormir, y ofrecerlo desmonta el propio plan.
+    if (!p.bloque) {
+      onResult({
+        msg: saludo + '! <b>Día cerrado.</b> Has hecho los ' + p.total + ' bloques de hoy. ' +
+          (eA.activa
+            ? 'Mañana sigue la lectura: el espaciado necesita que pase la noche para fijar lo de hoy.'
+            : 'Lo que estudies ahora de más rinde menos que lo que hagas mañana temprano.'),
+        acts: [], urgency: 'normal', prediction: prediction, fase: fase,
+        paso: p.paso, total: p.total, cerrado: true
+      });
+      return;
     }
 
-    if (m.hotStreak >= 5) msg='🔥 '+m.hotStreak+' seguidas! '+msg;
-    if (prediction && m.seen>=50) msg+=' [📅 Listo: '+prediction.date+']';
+    var b = p.bloque;
+    var aviso = '';
+    if (m.regression)          aviso = '📉 Bajada en las últimas sesiones, lo tengo en cuenta. ';
+    else if (m.hotStreak >= 5) aviso = '🔥 ' + m.hotStreak + ' seguidas. ';
 
-    onResult({msg, acts, urgency, prediction, fase});
+    var msg = aviso + saludo + '! <b>Paso ' + p.paso + ' de ' + p.total + ': ' + b.t + '.</b> ' +
+      (b.detalle ? b.detalle + '. ' : '') + _recorta(b.porque, 200);
+
+    onResult({
+      msg: msg,
+      acts: [{ t: (b.emoji || '▶') + ' Empezar: ' + b.t, fn: b.fn }],
+      urgency: eA.activa ? 'high' : (m.regression ? 'high' : 'normal'),
+      prediction: prediction, fase: fase,
+      paso: p.paso, total: p.total, cerrado: false
+    });
   }
+
 
   // ─── Detectar fase actual ─────────────────────────────────────────
   function _detectarFaseActual(s) {
@@ -337,8 +329,8 @@ var AGENTS = (function() {
     var debiles = familiasDebiles(2).filter(function(f){ return !f.leida; });
     if (debiles.length) {
       var c1 = CASOS.filter(function(c){ return c.id === debiles[0].id; })[0];
-      return { caso: c1, pendientes: debiles[0].total - debiles[0].dominadas,
-               total: debiles[0].total, motivo: 'fallos', fam: debiles[0] };
+      return _conPrincipio({ caso: c1, pendientes: debiles[0].total - debiles[0].dominadas,
+               total: debiles[0].total, motivo: 'fallos', fam: debiles[0] });
     }
     // Prioridad 2: la que cubre mas preguntas sin dominar.
     var mejor = null, mejorN = 0;
@@ -349,44 +341,106 @@ var AGENTS = (function() {
       var pendientes = ids.filter(function(id){ return !BRAIN.isDominated(id); }).length;
       if (pendientes > mejorN) { mejorN = pendientes; mejor = c; }
     });
-    if (!mejor) return null;
-    return { caso: mejor, pendientes: mejorN, total: _idsDeCaso(mejor).length,
-             motivo: 'cobertura' };
+    if (!mejor) {
+      // Sin casos pendientes, quedan los principios generales que no
+      // cuelgan de ningún caso todavía. Leerlos también es estudiar.
+      var suelta = (typeof LEYES !== 'undefined' ? LEYES : [])
+        .filter(function(l){ return !BRAIN.leyLeida(l.id); })[0];
+      if (!suelta) return null;
+      return { caso: null, ley: suelta, esLey: true, pendientes: 0, total: 0,
+               motivo: 'principio' };
+    }
+    return _conPrincipio({ caso: mejor, pendientes: mejorN, total: _idsDeCaso(mejor).length,
+             motivo: 'cobertura' });
+  }
+
+  // EL PRINCIPIO ANTES QUE EL CASO. Un caso es la aplicación de una ley a
+  // una escena concreta. Si se estudia el caso sin haber leído la ley, se
+  // aprende esa escena y no se transfiere a la siguiente, que es el fallo
+  // que este proyecto lleva persiguiendo desde el principio. Así que si la
+  // ley del caso elegido no está leída, hoy toca la ley.
+  function _conPrincipio(r) {
+    if (!r || !r.caso || !r.caso.ley || typeof LEYES === 'undefined') return r;
+    if (BRAIN.leyLeida(r.caso.ley)) return r;
+    var L = LEYES.filter(function(l){ return l.id === r.caso.ley; })[0];
+    if (!L) return r;
+    r.ley = L; r.esLey = true; r.casoDespues = r.caso;
+    return r;
   }
 
   // ═══════════════════════════════════════════════════════════════
   // ETAPA A · aprender a LEER antes de practicar
   // ═══════════════════════════════════════════════════════════════
-  function _clavesLex() {
+  // Todo el léxico en una sola lista, con su frecuencia real en el banco.
+  // El ORDEN es parte del método, no un detalle: primero las decisivas
+  // (fallarlas invierte la respuesta, cueste lo que cueste su frecuencia)
+  // y después el resto de mayor a menor frecuencia, porque cada clave
+  // automatizada compra tanto texto legible como veces aparece.
+  function _lexTodo() {
     var k = [];
     if (typeof LEX_PARES !== 'undefined')
-      LEX_PARES.forEach(function(p){ k.push(p.bg); if (p.op) k.push(p.op.bg); });
+      LEX_PARES.forEach(function(p){
+        k.push({ bg:p.bg, freq:p.freq||0, dec:1 });
+        if (p.op) k.push({ bg:p.op.bg, freq:p.op.freq||0, dec:1 });
+      });
     if (typeof LEX_BLOQUES !== 'undefined')
-      LEX_BLOQUES.forEach(function(b){ k.push(b.bg); });
+      LEX_BLOQUES.forEach(function(b){ k.push({ bg:b.bg, freq:b.freq||0, dec:0 }); });
     if (typeof LEX_GRAM !== 'undefined')
-      LEX_GRAM.forEach(function(g){ k.push(g.bg); });
+      LEX_GRAM.forEach(function(g){ k.push({ bg:g.bg, freq:g.freq||0, dec:0 }); });
     if (typeof LEX_PALABRAS !== 'undefined')
-      LEX_PALABRAS.forEach(function(w){ k.push(w.bg); });
-    // sin duplicados: una palabra que aparezca en dos pares saldría dos
-    // veces en la cola y falsearía el recuento
-    var visto = {};
-    return k.filter(function(x){ if (visto[x]) return false; visto[x] = 1; return true; });
+      LEX_PALABRAS.forEach(function(w){ k.push({ bg:w.bg, freq:w.freq||0, dec:0 }); });
+    // sin duplicados: una clave repetida saldría dos veces en la cola y
+    // falsearía el recuento. Si una de las dos copias era decisiva, la
+    // que se queda hereda la marca.
+    var visto = {}, out = [];
+    k.forEach(function(x){
+      if (visto[x.bg]) { if (x.dec) visto[x.bg].dec = 1; return; }
+      visto[x.bg] = x; out.push(x);
+    });
+    out.sort(function(a,b){
+      if (a.dec !== b.dec) return b.dec - a.dec;
+      return (b.freq||0) - (a.freq||0);
+    });
+    return out;
+  }
+
+  function _clavesLex() { return _lexTodo().map(function(x){ return x.bg; }); }
+
+  // LA PUERTA. Lo que hay que saber leer ANTES de tocar una pregunta. No
+  // es un porcentaje redondo: son las 18 claves decisivas (invierten el
+  // sentido de la frase) más todo lo que aparece 150 veces o más en el
+  // banco. Son 45 claves y cubren el 71% del texto del examen. El resto
+  // del léxico se sigue entrenando después, ya con las preguntas abiertas.
+  var LEX_PUERTA_FREQ = 150;
+  function _clavesPuerta() {
+    return _lexTodo()
+      .filter(function(x){ return x.dec || (x.freq||0) >= LEX_PUERTA_FREQ; })
+      .map(function(x){ return x.bg; });
+  }
+  function _clavesDecisivas() {
+    return _lexTodo().filter(function(x){ return x.dec; }).map(function(x){ return x.bg; });
   }
 
   // Se sale de la Etapa A por RENDIMIENTO, no por tiempo: hay que reconocer
-  // las decisivas y la mayoría de los bloques por debajo de 2 segundos.
+  // las 45 claves de la puerta por debajo del umbral de automaticidad.
+  // Si data-lex.js no ha cargado, esto devuelve activa:false a propósito:
+  // un fallo de carga no puede dejar la app entera cerrada.
   function etapaA() {
     var claves = _clavesLex();
-    if (!claves.length) return { activa: false };
-    var dec = [];
-    if (typeof LEX_PARES !== 'undefined')
-      LEX_PARES.forEach(function(p){ dec.push(p.bg); if (p.op) dec.push(p.op.bg); });
-    var eD = BRAIN.estadoLex(dec), eT = BRAIN.estadoLex(claves);
-    var superada = eD.pct >= 100 && eT.pct >= 70;
+    if (!claves.length) return { activa: false, abierta: true, superada: true };
+    var puerta = _clavesPuerta();
+    var eP = BRAIN.estadoLex(puerta),
+        eD = BRAIN.estadoLex(_clavesDecisivas()),
+        eT = BRAIN.estadoLex(claves);
+    var abierta = eP.automatizadas >= eP.total;
     return {
-      activa: !superada, superada: superada,
-      decisivas: eD, todo: eT, claves: claves,
-      pendientes: BRAIN.colaLex(claves, 999).length
+      activa: !abierta,                    // candado echado
+      abierta: abierta,                    // preguntas desbloqueadas
+      superada: eT.automatizadas >= eT.total,   // léxico terminado del todo
+      puerta: eP, decisivas: eD, todo: eT, claves: claves,
+      pendientes: BRAIN.colaLex(claves, 999).length,
+      pendientesPuerta: BRAIN.colaLex(puerta, 999).length,
+      umbralMs: eT.umbralMs
     };
   }
 
@@ -413,23 +467,58 @@ var AGENTS = (function() {
     // que tiene sentido hacer. Practicar preguntas antes es memorizar la
     // forma del texto en vez de entenderlo.
     var eA = etapaA();
-    if (eA.activa) {
+    var segs = Math.round((eA.umbralMs || 3000) / 1000);
+    // Con el candado echado va el primero y bloquea el resto. Abierta la
+    // puerta el bloque NO desaparece: quedan claves por automatizar y
+    // dejarlas a medias es perder la mitad de la lectura ganada.
+    if (eA.activa || (eA.todo && eA.todo.automatizadas < eA.todo.total)) {
       var pendLex = Math.min(24, Math.max(8, eA.pendientes));
-      b.push({ prio:0, orden:0, id:'lex', emoji:'🔤', escalable:1, n:pendLex,
-        t:'Aprender a leer el examen',
-        detalle: eA.decisivas.automatizadas + '/' + eA.decisivas.total + ' palabras decisivas · ' +
-                 eA.todo.automatizadas + '/' + eA.todo.total + ' en total',
-        porque:'El examen es entero en búlgaro y hay que leerlo a una palabra por segundo. A esa velocidad no se lee, se reconoce. Primero las palabras que invierten la respuesta, después los bloques que más se repiten. Se sale de aquí reconociéndolos en menos de 2 segundos, no por tiempo.',
+      b.push({ prio: eA.activa ? 0 : 4, orden: eA.activa ? 0 : 1,
+        id:'lex', emoji:'🔤', escalable:1, n:pendLex,
+        t: eA.activa ? 'Aprender a leer el examen' : 'Seguir con la lectura',
+        detalle: eA.activa
+          ? eA.puerta.automatizadas + '/' + eA.puerta.total + ' claves para abrir las preguntas · ' +
+            eA.todo.automatizadas + '/' + eA.todo.total + ' del léxico entero'
+          : eA.todo.automatizadas + '/' + eA.todo.total + ' claves automatizadas',
+        porque: eA.activa
+          ? 'El examen es entero en búlgaro y hay que leerlo a una palabra por segundo. A esa velocidad no se lee, se reconoce. Hasta que no reconozcas las ' + eA.puerta.total + ' claves de la puerta — las que invierten la respuesta y las que salen en casi todas las preguntas — las preguntas están cerradas: acertarías por la forma del texto, no por entenderlo. Se sale reconociéndolas en menos de ' + segs + ' segundos, no por tiempo.'
+          : 'Ya lees lo esencial, pero el léxico no está terminado. Cada clave que automatizas es una palabra menos que te frena dentro del examen.',
         min: Math.max(6, Math.round(pendLex * 0.5)), fn:"mod('lex')" });
+    }
+
+    // CIFRAS DURAS. Teoría, no práctica de preguntas: entra también con
+    // la puerta cerrada, y es lo que queda por hacer los días en que el
+    // léxico ya está al día y el espaciado manda esperar.
+    if (typeof CIFRAS !== 'undefined' && CIFRAS.length) {
+      var clavesCif = CIFRAS.map(function(c){ return c.k; });
+      var colaCif = BRAIN.colaLex(clavesCif, 12);
+      var eCif = BRAIN.estadoLex(clavesCif);
+      if (colaCif.length) {
+        b.push({ prio: eA.activa ? 1 : 5, orden: eA.activa ? 2 : 6,
+          id:'cifras', emoji:'🔢', escalable:1, n:colaCif.length,
+          t:'Cifras duras',
+          detalle: eCif.automatizadas + '/' + eCif.total + ' fijadas · ' + colaCif.length + ' para hoy',
+          porque:'Metros, plazos y porcentajes no se deducen de ninguna regla: o se saben o se fallan. Son 38 preguntas del banco y 66 puntos, y las dos más frecuentes de todo el examen (el triángulo a 30 o a 100 metros) están aquí dentro.',
+          min: Math.max(3, Math.round(colaCif.length * 0.4)), fn:"openCifras()" });
+      }
     }
 
     // La lectura va PRIMERA: la regla antes que la práctica.
     var ley = leyDeHoy();
     if (ley) {
-      b.push({ prio:1, orden:1, id:'ley', emoji:'📖', t:'Estudiar la ley: ' + ley.caso.t,
-        detalle: ley.pendientes + ' de ' + ley.total + ' preguntas sin dominar dependen de ella',
-        porque:'Va primero a propósito. Si practicas sin haber leído la regla aciertas por reconocer la foto, y eso no te sirve cuando el examen te pregunta lo mismo con otra imagen. Léela, escúchala si quieres, y márcala como estudiada.',
-        min: 6, fn: "abrirLey('" + ley.caso.id + "')", ley: ley.caso.id });
+      var _idL = ley.esLey ? ley.ley.id : ley.caso.id;
+      var _tL  = ley.esLey ? ley.ley.t   : ley.caso.t;
+      b.push({ prio:1, orden:1, id:'ley', emoji:'📖',
+        t: (ley.esLey ? 'Estudiar el principio: ' : 'Estudiar el caso: ') + _tL,
+        detalle: ley.esLey && ley.casoDespues
+          ? 'La regla de la que salen ' + ley.pendientes + ' preguntas sin dominar'
+          : (ley.total
+              ? ley.pendientes + ' de ' + ley.total + ' preguntas sin dominar dependen de ella'
+              : 'Principio general, sin caso todavía'),
+        porque: ley.esLey
+          ? 'Primero el principio, después la escena. Un caso es una ley aplicada a una foto concreta: si estudias la foto sin la regla, aciertas esa y fallas la siguiente, que es la misma ley con otro dibujo. Léela, escúchala si quieres, y márcala como estudiada.'
+          : 'Va primero a propósito. Si practicas sin haber leído la regla aciertas por reconocer la foto, y eso no te sirve cuando el examen te pregunta lo mismo con otra imagen. Léela, escúchala si quieres, y márcala como estudiada.',
+        min: 6, fn: "abrirLey('" + _idL + "')", ley: _idL });
     }
 
     if (m.due > 0) {
@@ -511,6 +600,14 @@ var AGENTS = (function() {
         min:25, fn:"mod('prueba')" });
     }
 
+    // CANDADO DE LA ETAPA A. Se construye el plan entero y después se
+    // recorta: cualquier bloque que abra preguntas se cae. Recortar aquí
+    // y no en cada push es lo que garantiza que no queda ninguno suelto,
+    // porque el modo guiado deriva sus permisos de esta misma lista.
+    if (eA.activa) b = b.filter(function(x){
+      return x.id === 'lex' || x.id === 'ley' || x.id === 'cifras';
+    });
+
     b.forEach(function(x){ x.hecho = !!hechos[x.id]; });
     var hechosN = b.filter(function(x){ return x.hecho; }).length;
 
@@ -561,7 +658,9 @@ var AGENTS = (function() {
       fase: fase,
       dias: dias,
       semana: BRAIN.semanaDeEstudio(),
-      tocaPrueba: toca
+      tocaPrueba: toca,
+      etapaA: eA.activa,
+      puerta: eA.puerta || null
     };
   }
 
@@ -900,7 +999,7 @@ var AGENTS = (function() {
   }
 
   return {
-    planDia, buildPrueba, leyDeHoy, proyeccion, etapaA, clavesLex: _clavesLex,
+    planDia, pasoActual, buildPrueba, leyDeHoy, proyeccion, etapaA, clavesLex: _clavesLex,
     getFamilias, familiasDebiles, familiaPorId, fraseFamilia,
     runCoach, getSRSQueue, buildFase1,
     buildRealExam, buildAdaptive, buildUltimaHora,

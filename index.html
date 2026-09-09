@@ -292,6 +292,10 @@ window.onerror = function(msg, src, line, col, err) {
  <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div><div class="htitle">&#x1F524; Aprender a leer</div><div class="hsub">Reconocer, no traducir</div></div></div>
  <div class="scr"><div id="lex-body"></div></div>
 </div>
+<div id="s-cifras" class="screen">
+ <div class="hdr"><button class="back" onclick="show('s-reglas')">&#8592;</button><div><div class="htitle">&#x1F522; Cifras duras</div><div class="hsub">Datos que no se razonan: se saben</div></div></div>
+ <div class="scr"><div id="cif-body"></div></div>
+</div>
 <div id="s-examen" class="screen">
  <div class="hdr"><button class="back" onclick="show('home')">&#8592;</button><div><div class="htitle">&#x23F1;&#xFE0F; Examen</div><div class="hsub">Simulacros y velocidad</div></div></div>
  <div class="scr">
@@ -318,6 +322,7 @@ window.onerror = function(msg, src, line, col, err) {
   <div class="grid">
    <button class="card hi full" onclick="openLex()" style="border-color:var(--acc)"><span class="ci">&#x1F524;</span><span class="ct">Aprender a leer</span><span class="cd">El b&uacute;lgaro que necesitas para el examen</span></button>
    <button class="card hi full" onclick="openLeyes()"><span class="ci">&#x1F4D6;</span><span class="ct">Leyes y casos</span><span class="cd">Las reglas explicadas, con im&aacute;genes y m&eacute;todo</span></button>
+   <button class="card hi full" onclick="openCifras()"><span class="ci">&#x1F522;</span><span class="ct">Cifras duras</span><span class="cd">Los datos que no se deducen: metros, plazos y porcentajes</span></button>
    <button class="card hi full" onclick="mod('pares')"><span class="ci">&#x1F3AD;</span><span class="ct">Pares trampa</span><span class="cd">Mismo texto y mismas opciones, distinta respuesta</span></button>
    <button class="card hi" onclick="openConfusiones()"><span class="ci">&#x1F500;</span><span class="ct">Confusiones</span><span class="cd">Lo que fallas siempre igual</span></button>
    <button class="card hi" onclick="mod('corrective')"><span class="ci">&#x1F3AF;</span><span class="ct">Mis errores</span><span class="cd">Segundo intento en las falladas</span></button>
@@ -687,6 +692,7 @@ window.onerror = function(msg, src, line, col, err) {
 <script src="data-ranked.js"></script>
 <script src="data-leyes.js"></script>
 <script src="data-lex.js"></script>
+<script src="data-cifras.js"></script>
 <script src="data-traps.js"></script>
 <script src="data-pts3.js"></script>
 <script src="data-multi.js"></script>

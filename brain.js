@@ -539,8 +539,13 @@ var BRAIN = (function() {
   // A esa velocidad no se lee: se RECONOCE. Y reconocer no es acertar,
   // es acertar SIN PENSAR. Por eso aquí no basta con responder bien:
   // hay que responder por debajo del umbral de automaticidad.
-  var LEX_MS = 2000;          // 2 s: por encima, aún estás traduciendo
+  var LEX_MS = 3000;          // 3 s: por encima, aún estás traduciendo
   var LEX_RACHA = 3;          // 3 aciertos rápidos seguidos = automatizado
+
+  // Un solo sitio decide el umbral. app.js lo lee de aquí en vez de
+  // llevarlo a fuego: si el cronómetro de la pantalla y el criterio del
+  // cerebro se separan, el contador miente y no se nota hasta tarde.
+  function umbralLex() { return LEX_MS; }
 
   function _lex(clave) {
     if (!STATE.lex) STATE.lex = {};
@@ -549,9 +554,13 @@ var BRAIN = (function() {
   }
 
   // ok: acertó.  ms: milisegundos que tardó.  dir: 'bg2es' o 'es2bg'.
-  function recordLex(clave, ok, ms, dir) {
+  // umbral: opcional. El léxico exige reconocer en 3 s porque es lectura;
+  // una cifra dura (30 metros, 70%) se RECUERDA, y recordar admite algo
+  // más de tiempo. Quien llama decide, el valor por defecto no cambia.
+  function recordLex(clave, ok, ms, dir, umbral) {
     var r = _lex(clave);
-    var rapido = ok && ms > 0 && ms <= LEX_MS;
+    var U = umbral > 0 ? umbral : LEX_MS;
+    var rapido = ok && ms > 0 && ms <= U;
     if (ok) { r.ok++; r.racha = rapido ? (r.racha || 0) + 1 : 0; }
     else    { r.ko++; r.racha = 0; }
     if (ms > 0) r.ms = (r.ms || []).concat(ms).slice(-8);
@@ -566,7 +575,7 @@ var BRAIN = (function() {
     return { rapido: rapido, racha: r.racha, automatizado: automatizado(clave) };
   }
 
-  // Automatizado = 3 aciertos seguidos por debajo de 2 s. No es saberlo:
+  // Automatizado = 3 aciertos seguidos por debajo del umbral. No es saberlo:
   // es no tener que pensarlo.
   function automatizado(clave) {
     var r = (STATE.lex || {})[clave];
@@ -1005,7 +1014,7 @@ var BRAIN = (function() {
     getGrupos, incoherencias, indiceTransferencia, colaPares,
     fotoDelDia, ritmoDominio,
     nivelIdioma, isDominatedBG, destete, colaDestete,
-    recordLex, automatizado, msMedio, colaLex, estadoLex,
+    recordLex, automatizado, msMedio, colaLex, estadoLex, umbralLex,
     saveNow, flush: saveNow, statsEscritura,
     interleave: _interleave,
     shuffle: _shuffle, shA: _shA,
