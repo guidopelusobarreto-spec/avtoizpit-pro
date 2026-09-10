@@ -296,6 +296,18 @@ window.onerror = function(msg, src, line, col, err) {
  <div class="hdr"><button class="back" onclick="show('s-reglas')">&#8592;</button><div><div class="htitle">&#x2696;&#xFE0F; Verdadero o falso</div><div class="hsub">La frase, no la pregunta</div></div></div>
  <div class="scr"><div id="af-body"></div></div>
 </div>
+<div id="s-flashvid" class="screen">
+ <div class="hdr"><button class="back" onclick="show('s-examen')">&#8592;</button><div><div class="htitle">&#x1F3AC; Flash de v&iacute;deos</div><div class="hsub">El instante que define la respuesta</div></div></div>
+ <div class="scr"><div id="fvid-body"></div></div>
+</div>
+<div id="s-galeria" class="screen">
+ <div class="hdr"><button class="back" onclick="show('s-reglas')">&#8592;</button><div><div class="htitle">&#x1F5BC;&#xFE0F; Galer&iacute;a visual</div><div class="hsub">Cuando manda el dibujo, no el texto</div></div></div>
+ <div class="scr"><div id="gal-body"></div></div>
+</div>
+<div id="s-verdades" class="screen">
+ <div class="hdr"><button class="back" onclick="show('s-reglas')">&#8592;</button><div><div class="htitle">&#x2705; Solo las verdades</div><div class="hsub">Lo que S&Iacute; es cierto, sin distractores</div></div></div>
+ <div class="scr"><div id="ver-body"></div></div>
+</div>
 <div id="s-cuantas" class="screen">
  <div class="hdr"><button class="back" onclick="show('s-examen')">&#8592;</button><div><div class="htitle">&#x2611;&#xFE0F; &iquest;Cu&aacute;ntas hay que marcar?</div><div class="hsub">Antes de responder, cu&aacute;ntas casillas</div></div></div>
  <div class="scr"><div id="cua-body"></div></div>
@@ -315,6 +327,7 @@ window.onerror = function(msg, src, line, col, err) {
   </div>
   <div class="sec-lbl">Entrenar la t&eacute;cnica</div>
   <div class="grid">
+   <button class="card hi full" onclick="openFlashVideos()"><span class="ci">&#x1F3AC;</span><span class="ct">Flash de v&iacute;deos</span><span class="cd">El instante que decide cada clip, sin ver los 20 segundos</span></button>
    <button class="card hi full" onclick="openCuantas()"><span class="ci">&#x2611;&#xFE0F;</span><span class="ct">&iquest;Cu&aacute;ntas hay que marcar?</span><span class="cd">Marcar una de menos vale cero puntos. Entrena el reflejo antes de leer</span></button>
   </div>
   <div class="sec-lbl">Entrenar velocidad</div>
@@ -335,6 +348,8 @@ window.onerror = function(msg, src, line, col, err) {
    <button class="card hi full" onclick="openLex()" style="border-color:var(--acc)"><span class="ci">&#x1F524;</span><span class="ct">Aprender a leer</span><span class="cd">El b&uacute;lgaro que necesitas para el examen</span></button>
    <button class="card hi full" onclick="openLeyes()"><span class="ci">&#x1F4D6;</span><span class="ct">Leyes y casos</span><span class="cd">Las reglas explicadas, con im&aacute;genes y m&eacute;todo</span></button>
    <button class="card hi full" onclick="openAfirm()"><span class="ci">&#x2696;&#xFE0F;</span><span class="ct">Verdadero o falso</span><span class="cd">258 frases que no cambian de veredicto salgan en la pregunta que salgan</span></button>
+   <button class="card hi full" onclick="openGaleria()"><span class="ci">&#x1F5BC;&#xFE0F;</span><span class="ct">Galer&iacute;a visual</span><span class="cd">El mismo enunciado con distinta foto: el diccionario de escenas</span></button>
+   <button class="card hi full" onclick="openVerdades()"><span class="ci">&#x2705;</span><span class="ct">Solo las verdades</span><span class="cd">Las afirmaciones correctas, sin elegir: se leen, no se contestan</span></button>
    <button class="card hi full" onclick="openCifras()"><span class="ci">&#x1F522;</span><span class="ct">Cifras duras</span><span class="cd">Los datos que no se deducen: metros, plazos y porcentajes</span></button>
    <button class="card hi full" onclick="mod('pares')"><span class="ci">&#x1F3AD;</span><span class="ct">Pares trampa</span><span class="cd">Mismo texto y mismas opciones, distinta respuesta</span></button>
    <button class="card hi" onclick="openConfusiones()"><span class="ci">&#x1F500;</span><span class="ct">Confusiones</span><span class="cd">Lo que fallas siempre igual</span></button>
@@ -646,8 +661,12 @@ window.onerror = function(msg, src, line, col, err) {
   <!-- Cache offline -->
   <div class="sett-row">
    <div class="sett-lbl">📴 Cache offline</div>
-   <div class="sett-sub">Guarda las imágenes y videos más frecuentes para usar sin internet</div>
-   <button id="cache-btn" class="sett-btn" style="margin-top:8px" onclick="preCacheImages()">⬇️ Cachear ahora</button>
+   <div class="sett-sub">Descarga el material dentro del navegador para que la app siga funcionando sin cobertura. Se hace una vez, con wifi. Primero intenta la red y, si no hay, tira de aqu&iacute;.</div>
+   <button id="cache-btn" class="sett-btn" style="margin-top:8px" onclick="preCacheImages()">&#11015;&#65039; Todas las im&aacute;genes (~25-30 MB)</button>
+   <button id="cache-vid-btn" class="sett-btn" style="margin-top:8px" onclick="preCacheVideos()">&#127916; Los 56 v&iacute;deos (pesado, solo con wifi)</button>
+   <button class="sett-btn" style="margin-top:8px" onclick="abrirImportador()">&#128241; Importar la carpeta del tel&eacute;fono (sin descargar nada)</button>
+   <input id="imp-dir" type="file" webkitdirectory directory multiple accept="image/*,video/mp4" style="display:none" onchange="importarCarpeta(this)">
+   <div id="cache-info" class="sett-sub" style="margin-top:6px"></div>
   </div>
   <!-- Contraseña -->
   <div class="sett-row">
@@ -707,6 +726,7 @@ window.onerror = function(msg, src, line, col, err) {
 <script src="data-leyes.js"></script>
 <script src="data-lex.js"></script>
 <script src="data-cifras.js"></script>
+<script src="data-verif.js"></script>
 <script src="data-traps.js"></script>
 <script src="data-pts3.js"></script>
 <script src="data-multi.js"></script>

@@ -7,6 +7,44 @@ var IMG      = 'https://avtoizpit.com/api/pictures/';
 var VID      = 'https://avtoizpit.com/api/videos/video';
 var IMG_LOC  = 'file:///storage/emulated/0/Download/avtoizpit_offline/img/';
 var VID_LOC  = 'file:///storage/emulated/0/Download/avtoizpit_offline/vid/av_';
+// Fotogramas de los vídeos: el instante que define cada clip, recortado
+// de las capturas. Viven en la misma carpeta offline del teléfono que el
+// resto del material, no en el repositorio.
+var FRM_LOC  = 'file:///storage/emulated/0/Download/avtoizpit_offline/vidjpg/';
+
+// Devuelve un <img> que intenta primero la carpeta local del teléfono y
+// cae a la copia servida por la web. Mismo criterio que loadImg, pero en
+// forma de cadena, para los módulos que pintan HTML de una vez.
+function imgTag(id, estilo, alt) {
+  if (!id) return '';
+  var local, online;
+  if (typeof id === 'string' && id.indexOf('http') === 0) {
+    local  = IMG_LOC + id.split('/').pop();
+    online = id;
+  } else {
+    local  = IMG_LOC + id + '.png';
+    online = IMG + id + '.png?quality=2';
+  }
+  return '<img src="'+online+'" alt="'+(alt||'')+'" loading="lazy" style="'+(estilo||'')+'" '+
+    'onerror="if(this.src!==\''+local+'\'){this.src=\''+local+'\';}else{this.style.display=\'none\';}">';
+}
+
+// Tres sitios donde puede estar el fotograma, en este orden:
+//   1) la carpeta offline del teléfono (solo si la app se abre en local);
+//   2) vidjpg/<id>.jpg, si la carpeta está subida al repositorio;
+//   3) <id>.jpg en la raíz, por si los ficheros se subieron sueltos.
+// El service worker guarda los .jpg en cache-first: se descargan una vez
+// y a partir de ahí funcionan sin conexión.
+function frameTag(id, estilo) {
+  var web   = 'vidjpg/' + id + '.jpg',
+      raiz  = id + '.jpg',
+      local = FRM_LOC + id + '.jpg';
+  return '<img src="'+web+'" alt="Instante que define la situación" loading="lazy" '+
+    'style="'+(estilo||'')+'" onerror="'+
+    'if(this.src.indexOf(\'vidjpg/\')>=0){this.src=\''+raiz+'\';}'+
+    'else if(this.src.indexOf(\'file:\')!==0){this.src=\''+local+'\';}'+
+    'else{this.style.display=\'none\';var a=document.getElementById(\'fvid-falta\');if(a)a.style.display=\'block\';}">';
+}
 
 // loadImg maneja 3 casos:
 // 1. URL completa (rta.government.bg o http): extrae filename para local, usa URL como fallback online
@@ -25,11 +63,15 @@ function loadImg(el, id) {
     onlineSrc = IMG + id + '.png?quality=2';
   }
 
-  el.src = localSrc;
+  // ONLINE PRIMERO. La app se sirve desde https, y desde ahí el navegador
+  // BLOQUEA cualquier file://: intentarlo antes solo gastaba un error por
+  // imagen. El offline de verdad lo da el service worker, que guarda cada
+  // imagen la primera vez que se ve. La ruta local queda de reserva por si
+  // algún día se abre una copia local de index.html.
+  el.src = onlineSrc;
   el.onerror = function() {
-    if (this.src === localSrc) {
-      // Local falló — intentar online
-      this.src = onlineSrc;
+    if (this.src === onlineSrc) {
+      this.src = localSrc;
     } else {
       // Online también falló — mostrar placeholder visible en vez de ocultar
       this.onerror = null;
@@ -48,12 +90,12 @@ function loadVid(el, vidId, rtaUrl) {
   var onlineSrc = VID + vidId + '.mp4';
   var rtaSrc    = rtaUrl || null;
 
-  el.src = localSrc;
+  el.src = onlineSrc;
   el.onerror = function() {
-    if (this.src === localSrc) {
-      this.src = onlineSrc;
-    } else if (rtaSrc && this.src === onlineSrc) {
+    if (this.src === onlineSrc && rtaSrc) {
       this.src = rtaSrc;
+    } else if (this.src !== localSrc) {
+      this.src = localSrc;
     } else {
       this.style.display = 'none';
     }
@@ -646,6 +688,20 @@ function begin(opts) {
   // en el único sitio por el que pasan todos los modos, y no en cada uno.
   if (opts && opts.qs && opts.qs.length) {
     try { opts.qs = BRAIN.shA(opts.qs); } catch (e) {}
+    // el recorte por nivel no se aplica en los modos que imitan el examen
+    try {
+      if (!MODOS_EXAMEN[opts.mode] && !opts.exam) {
+        // material nuevo: solo lo verificado. Si el filtro deja la
+        // sesión vacía se mantiene lo que había: más vale estudiar algo
+        // que quedarse con una pantalla en blanco.
+        if (!opts.sinFiltro) {
+          var v = opts.qs.filter(esVerificada);
+          if (v.length >= Math.min(5, opts.qs.length)) opts.qs = v;
+        }
+        opts.nivel = nivelJuego();
+        opts.qs = _reducirOpciones(opts.qs, opts.nivel.ops);
+      }
+    } catch (e) {}
   }
   S = Object.assign({}, opts, {
     idx:0, score:0, ok:0, ko:0, t0:Date.now(),
@@ -689,6 +745,96 @@ function startTimer(sec) {
 // Modos que imitan el examen oficial: ahí no hay ninguna ayuda que el
 // examen no dé. El oficial muestra los puntos de la pregunta y nada más.
 var MODOS_EXAMEN = {realexam:1, examdry:1, prueba:1, ultimahora:1, quick:1};
+
+// ── MATERIAL VERIFICADO ───────────────────────────────────────────
+// 847 preguntas tienen su explicación didáctica escrita y, si llevan
+// imagen, la imagen auditada. Las otras 640 tienen explicaciones viejas,
+// cortas o sin comprobar contra el dibujo.
+// La respuesta correcta de TODAS es la oficial: se cotejó contra el
+// metadato de la ДАИ y coincide en las 1.423 comprobables. Lo que no
+// está verificado es la EXPLICACIÓN, no la respuesta. Por eso:
+//   · el Profesor solo enseña material nuevo de la lista verificada;
+//   · los simulacros usan el banco entero, porque con 847 preguntas
+//     sesgadas hacia las de 1 punto la nota saldría falsa;
+//   · la explicación no verificada NO se muestra: mejor un hueco
+//     honesto que una explicación que puede estar mal.
+var _VERIF = null;
+function _setVerif() {
+  if (_VERIF) return _VERIF;
+  _VERIF = {};
+  if (typeof VERIFICADAS !== 'undefined')
+    VERIFICADAS.forEach(function(id){ _VERIF[id] = 1; });
+  return _VERIF;
+}
+function esVerificada(q) {
+  var v = _setVerif();
+  if (!Object.keys(v).length) return true;   // sin lista, no se bloquea nada
+  return !!v[q && q.id];
+}
+window.esVerificada = esVerificada;
+
+function _explicacionDe(q) {
+  if (!q || !q.explain) return '';
+  if (esVerificada(q)) return q.explain;
+  return '';
+}
+function _avisoSinRevisar() {
+  return '<div class="exp-b" style="text-align:left;font-size:0.68rem;color:var(--fg3);'+
+    'border-left:3px solid #eab308;margin:10px 0">⏳ <b>Explicación pendiente de revisión.</b> '+
+    'La respuesta correcta es la oficial y puedes fiarte de ella, pero el porqué todavía no '+
+    'está comprobado y prefiero no enseñarte algo que puede estar mal. Se desbloquea cuando '+
+    'la revisemos.</div>';
+}
+
+// ── NIVELES DE JUEGO ──────────────────────────────────────────────
+// La app empieza fácil y se endurece sola, sin que haya que tocar
+// ningún interruptor: lo decide el Profesor con lo que llevas dominado.
+// Nivel 1, dos opciones. Nivel 2, tres. Nivel 3 y 4, todas.
+// La ayuda es quitar distractores, NO enseñar atajos que en la tablet no
+// existen: se entrena a descartar, que es lo que hará falta el día del
+// examen. En los modos que imitan el examen no hay nivel que valga.
+var NIVELES = [
+  { n:1, t:'Asistido',  ops:2, desc:'Dos opciones: la buena y un cebo' },
+  { n:2, t:'Guiado',    ops:3, desc:'Tres opciones' },
+  { n:3, t:'Completo',  ops:0, desc:'Todas las opciones, como el examen' },
+  { n:4, t:'Examen',    ops:0, desc:'Sin ninguna ayuda' }
+];
+
+function nivelJuego() {
+  try {
+    var d = BRAIN.countDominated(ALL.map(function(q){ return q.id; }));
+    if (d < 50)  return NIVELES[0];
+    if (d < 200) return NIVELES[1];
+    if (d < 500) return NIVELES[2];
+    return NIVELES[3];
+  } catch (e) { return NIVELES[2]; }
+}
+window.nivelJuego = nivelJuego;
+
+// Deja todas las correctas y recorta distractores hasta el tope del
+// nivel. Nunca quita una correcta: eso cambiaría la respuesta.
+// Prioriza dejar los cebos que el banco repite (empiezan por «само», o
+// llevan «без ограничения»), porque son los que hay que aprender a ver.
+function _reducirOpciones(qs, tope) {
+  if (!tope) return qs;
+  return qs.map(function(q){
+    if (!q.a || q.a.length <= tope) return q;
+    var buenas = q.a.filter(function(a){ return a.ok; });
+    var malas  = q.a.filter(function(a){ return !a.ok; });
+    // Una pregunta de 3 correctas no cabe en 2 opciones. En ese caso el
+    // recorte deja las correctas y UN cebo: sigue siendo más fácil que
+    // las cuatro, y sigue obligando a descartar.
+    var lim = Math.max(tope, buenas.length + 1);
+    if (q.a.length <= lim) return q;
+    var cebo = function(a){
+      var t = (a.t || '').toLowerCase();
+      return /^само/.test(t) || /без ограничени/.test(t) || /не се променя/.test(t) ? 0 : 1;
+    };
+    malas.sort(function(a,b){ return cebo(a) - cebo(b); });
+    var lista = buenas.concat(malas.slice(0, lim - buenas.length));
+    return Object.assign({}, q, { a: BRAIN.shuffle(lista) });
+  });
+}
 function _modoExamenReal() {
   return !!(S && MODOS_EXAMEN[S.mode]);
 }
@@ -728,6 +874,7 @@ function renderQ() {
 
   var bdb = document.getElementById('bdg'); bdb.innerHTML='';
   bdg(bdb,'bp',(q.p||1)+'pt');
+  if (S.nivel && S.nivel.ops) bdg(bdb,'bm','Nivel '+S.nivel.n+' · '+S.nivel.t);
 
   // NUEVO: Indicador de probabilidad real
   var prob = BRAIN.getProb(q.id);
@@ -1084,6 +1231,322 @@ function _finAf() {
 window._finAf = _finAf;
 
 // ══════════════════════════════════════════════════════════════════
+// GALERÍA VISUAL · las familias donde manda el dibujo
+// ══════════════════════════════════════════════════════════════════
+// 86 familias comparten enunciado y llevan imagen, y en 80 de ellas cada
+// imagen tiene SIEMPRE la misma respuesta: la familia es un diccionario
+// foto → significado. Las 19 mayores cubren 201 preguntas. Estudiadas en
+// bloque se ve el repertorio cerrado de respuestas posibles, que es lo
+// que no se ve cuando salen sueltas cada tres días.
+var _GAL = null;
+function _familiasImagen() {
+  if (_GAL) return _GAL;
+  var g = {};
+  (typeof ALL !== 'undefined' ? ALL : []).forEach(function(q){
+    if (!q.i) return;
+    var k = _normEnun(q.bg);
+    (g[k] = g[k] || []).push(q);
+  });
+  _GAL = Object.keys(g).filter(function(k){ return g[k].length > 1; })
+    .map(function(k){
+      var qs = g[k].slice().sort(function(a,b){ return (b.f||0)-(a.f||0); });
+      var resp = {};
+      qs.forEach(function(q){
+        var r = q.a.filter(function(a){ return a.ok; })
+                 .map(function(a){ return a.es || a.t; }).join(' · ');
+        resp[r] = (resp[r] || 0) + 1;
+      });
+      return { bg: qs[0].bg, es: qs[0].es || '', qs: qs, n: qs.length,
+               distintas: Object.keys(resp).length };
+    })
+    .sort(function(a,b){ return b.n - a.n; });
+  return _GAL;
+}
+
+function openGaleria() {
+  if (_puertaCerrada()) { avisoPuerta(); return; }
+  if (typeof ALL === 'undefined' || !ALL.length) { toast('Banco no cargado'); return; }
+  show('s-galeria');
+  verGaleria();
+}
+window.openGaleria = openGaleria;
+
+function verGaleria(idx) {
+  var c = document.getElementById('gal-body');
+  if (!c) return;
+  var F = _familiasImagen();
+  if (idx === undefined) {
+    var top = F.filter(function(f){ return f.n >= 3; });
+    c.innerHTML =
+      '<div style="font-size:0.68rem;color:var(--fg3);line-height:1.5;margin-bottom:12px">'+
+        top.length+' familias en las que el enunciado se repite y lo que cambia es el dibujo. '+
+        'Aquí la respuesta no está en las palabras: cada imagen tiene la suya, y el repertorio '+
+        'de respuestas posibles es cerrado. Míralas juntas y deja de dudar.</div>'+
+      top.map(function(f,i){
+        var real = F.indexOf(f);
+        return '<button onclick="verGaleria('+real+')" style="display:block;width:100%;'+
+          'text-align:left;background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;'+
+          'padding:10px 12px;margin-bottom:8px;cursor:pointer">'+
+          '<div style="font-size:0.72rem;font-weight:700;color:var(--fg);line-height:1.35">'+
+            esc(f.es || f.bg)+'</div>'+
+          '<div style="font-size:0.62rem;color:var(--acc);margin-top:3px">'+
+            f.n+' imágenes · '+f.distintas+' respuestas distintas'+
+            (f.distintas < f.n ? ' · se repiten' : '')+'</div>'+
+          '</button>';
+      }).join('');
+    return;
+  }
+  var f = F[idx];
+  if (!f) return verGaleria();
+  c.innerHTML =
+    '<button class="rbtn" style="margin-bottom:12px" onclick="verGaleria()">← Todas las familias</button>'+
+    '<div style="font-size:0.86rem;font-weight:800;color:var(--fg);line-height:1.35">'+esc(f.bg)+'</div>'+
+    '<div style="font-size:0.72rem;color:var(--acc);margin-bottom:12px">'+esc(_sinPista(f.es))+'</div>'+
+    f.qs.map(function(q){
+      var ok = q.a.filter(function(a){ return a.ok; })
+        .map(function(a){ return '<div style="font-size:0.72rem;color:var(--fg);line-height:1.35">'+
+          esc(a.t||'')+'</div>'+(a.es?'<div style="font-size:0.68rem;color:var(--acc);line-height:1.35">'+
+          esc(a.es)+'</div>':''); }).join('');
+      return '<div style="background:var(--bg2);border-radius:10px;padding:10px;margin-bottom:10px">'+
+        imgTag(q.i, 'width:100%;border-radius:8px;background:#fff;margin-bottom:8px', 'Imagen de la pregunta')+
+        '<div style="border-left:3px solid #22c55e;padding-left:8px">'+ok+'</div>'+
+        (esVerificada(q) && q.explain
+          ? '<div style="font-size:0.66rem;color:var(--fg3);line-height:1.45;margin-top:8px">'+
+            esc(q.explain)+'</div>' : '')+
+        '</div>';
+    }).join('')+
+    '<button class="rbtn p" style="width:100%" onclick="BRAIN.marcarBloque(\'galeria\');toast(\'Familia repasada\');verGaleria()">He repasado esta familia</button>';
+}
+window.verGaleria = verGaleria;
+
+// ══════════════════════════════════════════════════════════════════
+// FLASH DE VÍDEOS · el fotograma que decide, sin el vídeo
+// ══════════════════════════════════════════════════════════════════
+// Los 56 clips duran 15-20 segundos y los primeros 12 son paisaje: el
+// suceso que define la respuesta ocurre al final. De cada uno hay un
+// fotograma capturado justo en ese instante, guardado como vid/<id>.jpg.
+// Repasar con el fotograma cuesta 3 segundos en vez de 20, y quita el
+// ruido de todo lo que pasa antes y no importa. Para el examen sigue
+// haciendo falta ver los clips enteros al menos una vez: allí el vídeo
+// se reproduce un número limitado de veces y hay que saber dónde mirar.
+var _VF = null;
+function _fotoVideo(q) {
+  return (q && (q.v || q.rta_v)) ? 'vid/' + q.id + '.jpg' : null;
+}
+
+function openFlashVideos() {
+  if (_puertaCerrada()) { avisoPuerta(); return; }
+  var pool = (typeof VIDS !== 'undefined' ? VIDS : []).slice();
+  if (!pool.length) { toast('No hay vídeos cargados'); return; }
+  pool.sort(function(a,b){ return (b.f||0)*(b.p||1) - (a.f||0)*(a.p||1); });
+  _VF = { pool: pool, i: 0, visto: false };
+  show('s-flashvid');
+  pintarFlashVid();
+}
+window.openFlashVideos = openFlashVideos;
+
+function pintarFlashVid() {
+  var c = document.getElementById('fvid-body');
+  if (!c || !_VF) return;
+  var q = _VF.pool[_VF.i];
+  if (!q) { _VF = null; return show('s-examen'); }
+  c.innerHTML =
+    '<div style="font-size:0.62rem;color:var(--fg3);text-align:center;margin-bottom:8px">'+
+      (_VF.i+1)+' de '+_VF.pool.length+' · clip '+(q.v||q.rta_v)+' · '+(q.p||1)+' pt</div>'+
+    frameTag(q.id, 'width:100%;border-radius:10px;margin-bottom:10px')+
+    '<div id="fvid-falta" style="display:none;font-size:0.68rem;color:var(--fg3);'+
+      'background:var(--bg2);border-radius:8px;padding:10px;margin-bottom:10px">'+
+      'No encuentro el fotograma de esta pregunta. Debe estar en '+
+      'Download/avtoizpit_offline/vidjpg/'+q.id+'.jpg</div>'+
+    '<div style="font-size:0.82rem;font-weight:700;color:var(--fg);line-height:1.35;margin-bottom:4px">'+
+      esc(q.bg||'')+'</div>'+
+    '<div style="font-size:0.72rem;color:var(--fg3);margin-bottom:12px">'+esc(_sinPista(q.es||''))+'</div>'+
+    (_VF.visto
+      ? q.a.filter(function(a){ return a.ok; }).map(function(a){
+          return '<div style="background:var(--bg2);border-left:3px solid #22c55e;border-radius:6px;'+
+            'padding:8px 10px;margin-bottom:6px">'+
+            '<div style="font-size:0.72rem;color:var(--fg);line-height:1.4">'+esc(a.t||'')+'</div>'+
+            (a.es?'<div style="font-size:0.68rem;color:var(--acc);line-height:1.4">'+esc(a.es)+'</div>':'')+
+            '</div>';
+        }).join('')+
+        (q.explain ? '<div class="exp-b" style="text-align:left;font-size:0.68rem;color:var(--fg3);'+
+          'margin:10px 0">'+esc(q.explain)+'</div>' : '')+
+        (q.rta_url ? '<a href="'+q.rta_url+'" target="_blank" rel="noopener" '+
+          'style="display:block;text-align:center;font-size:0.68rem;color:var(--acc);'+
+          'margin-bottom:10px">Ver el clip entero ↗</a>' : '')+
+        '<div style="display:flex;gap:8px">'+
+          '<button class="rbtn" style="flex:1" onclick="pasarFlashVid(-1)">Anterior</button>'+
+          '<button class="rbtn p" style="flex:1" onclick="pasarFlashVid(1)">Siguiente</button>'+
+        '</div>'
+      : '<button class="rbtn p" style="width:100%" onclick="revelarFlashVid()">Ver la respuesta</button>'+
+        '<div style="font-size:0.62rem;color:var(--fg3);margin-top:10px;text-align:center;line-height:1.5">'+
+        'Mira el fotograma y decide qué harías ANTES de destapar.</div>');
+}
+window.pintarFlashVid = pintarFlashVid;
+
+function revelarFlashVid() { _VF.visto = true; pintarFlashVid(); }
+window.revelarFlashVid = revelarFlashVid;
+
+function pasarFlashVid(d) {
+  if (!_VF) return;
+  _VF.i = Math.max(0, Math.min(_VF.pool.length - 1, _VF.i + d));
+  _VF.visto = false;
+  pintarFlashVid();
+  if (_VF.i === _VF.pool.length - 1) BRAIN.marcarBloque('videos');
+}
+window.pasarFlashVid = pasarFlashVid;
+
+// ══════════════════════════════════════════════════════════════════
+// SOLO LAS VERDADES · leer lo cierto, sin elegir
+// ══════════════════════════════════════════════════════════════════
+// Medido sobre el banco: hay 57 familias de preguntas que comparten el
+// mismo enunciado y NO dependen de ninguna imagen. Dentro de ellas, el
+// 100% de las opciones es siempre verdadera o siempre falsa, en las 202
+// preguntas que las forman. Es decir: no son 202 preguntas, son 57 listas.
+// Aprendida la lista, se contesta cualquier permutación que salga.
+// En las familias CON imagen esto NO vale: ahí la misma opción es cierta
+// con un dibujo y falsa con otro, y por eso quedan fuera de aquí.
+var _VER = null;
+
+function _normEnun(t) {
+  return String(t || '').toLowerCase()
+    .replace(/[«»„”:.,;!?()]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Construye las familias una sola vez por sesión: recorrer 1.487
+// preguntas en cada pintado sería tirar batería sin motivo.
+var _VER_FAM = null;
+function _familiasVerdad() {
+  if (_VER_FAM) return _VER_FAM;
+  var g = {};
+  (typeof ALL !== 'undefined' ? ALL : []).forEach(function(q){
+    if (q.i) return;                       // con imagen manda el dibujo
+    if (!q.a || q.a.some(function(a){ return !a.t; })) return;
+    var k = _normEnun(q.bg);
+    (g[k] = g[k] || []).push(q);
+  });
+  _VER_FAM = Object.keys(g).filter(function(k){ return g[k].length > 1; })
+    .map(function(k){
+      var qs = g[k], op = {};
+      qs.forEach(function(q){ q.a.forEach(function(a){
+        var t = a.t;
+        if (!op[t]) op[t] = { bg:t, es:a.es || '', ok:0, ko:0 };
+        a.ok ? op[t].ok++ : op[t].ko++;
+      }); });
+      var lista = Object.keys(op).map(function(t){ return op[t]; });
+      return {
+        bg: qs[0].bg, es: qs[0].es || '', n: qs.length,
+        ver: lista.filter(function(o){ return o.ok && !o.ko; }),
+        fal: lista.filter(function(o){ return !o.ok && o.ko; }),
+        mix: lista.filter(function(o){ return o.ok && o.ko; }).length
+      };
+    })
+    .filter(function(f){ return f.ver.length; })
+    .sort(function(a,b){ return b.n - a.n; });
+  return _VER_FAM;
+}
+
+function openVerdades() {
+  if (_puertaCerrada()) { avisoPuerta(); return; }
+  if (typeof ALL === 'undefined' || !ALL.length) { toast('Banco no cargado'); return; }
+  show('s-verdades');
+  verVerdades('fam');
+}
+window.openVerdades = openVerdades;
+
+function verVerdades(tipo, idx) {
+  var c = document.getElementById('ver-body');
+  if (!c) return;
+  var fams = _familiasVerdad();
+  var tabs =
+    '<div style="display:flex;gap:8px;margin-bottom:12px">'+
+      '<button class="rbtn'+(tipo==='fam'?' p':'')+'" style="flex:1" onclick="verVerdades(\'fam\')">Por familias</button>'+
+      '<button class="rbtn'+(tipo==='una'?' p':'')+'" style="flex:1" onclick="verVerdades(\'una\')">Una a una</button>'+
+    '</div>';
+
+  if (tipo === 'fam' && idx === undefined) {
+    var preg = fams.reduce(function(a,f){ return a + f.n; }, 0);
+    c.innerHTML = tabs +
+      '<div style="font-size:0.68rem;color:var(--fg3);line-height:1.5;margin-bottom:12px">'+
+        fams.length+' familias que se repiten con el mismo enunciado y sin imagen, '+
+        preg+' preguntas en total. Dentro de cada una, cada afirmación es siempre '+
+        'verdadera o siempre falsa: apréndete la lista y da igual cómo te la permuten.</div>'+
+      fams.map(function(f,i){
+        return '<button onclick="verVerdades(\'fam\','+i+')" style="display:block;width:100%;'+
+          'text-align:left;background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;'+
+          'padding:10px 12px;margin-bottom:8px;cursor:pointer">'+
+          '<div style="font-size:0.72rem;font-weight:700;color:var(--fg);line-height:1.35">'+
+            esc(f.es || f.bg)+'</div>'+
+          '<div style="font-size:0.62rem;color:var(--acc);margin-top:3px">'+
+            f.n+' preguntas · '+f.ver.length+' verdaderas · '+f.fal.length+' falsas</div>'+
+          '</button>';
+      }).join('');
+    return;
+  }
+
+  if (tipo === 'fam') {
+    var f = fams[idx];
+    if (!f) return verVerdades('fam');
+    var fila = function(o, verde){
+      return '<div style="background:var(--bg2);border-left:3px solid '+(verde?'#22c55e':'#ef4444')+';'+
+        'border-radius:6px;padding:8px 10px;margin-bottom:6px">'+
+        '<div style="font-size:0.72rem;color:var(--fg);line-height:1.4">'+esc(o.bg)+'</div>'+
+        (o.es ? '<div style="font-size:0.68rem;color:'+(verde?'var(--acc)':'var(--fg3)')+';line-height:1.4">'+esc(o.es)+'</div>' : '')+
+        '</div>';
+    };
+    c.innerHTML =
+      '<button class="rbtn" style="margin-bottom:12px" onclick="verVerdades(\'fam\')">← Todas las familias</button>'+
+      '<div style="font-size:0.9rem;font-weight:800;color:var(--fg);line-height:1.35;margin-bottom:4px">'+
+        esc(f.bg)+'</div>'+
+      '<div style="font-size:0.78rem;color:var(--acc);margin-bottom:12px">'+esc(f.es)+'</div>'+
+      '<div style="font-size:0.62rem;color:#22c55e;font-weight:700;margin-bottom:6px">SIEMPRE VERDADERAS ('+f.ver.length+')</div>'+
+      f.ver.map(function(o){ return fila(o, true); }).join('')+
+      (f.fal.length
+        ? '<div style="font-size:0.62rem;color:#ef4444;font-weight:700;margin:14px 0 6px">SIEMPRE FALSAS ('+f.fal.length+')</div>'+
+          f.fal.map(function(o){ return fila(o, false); }).join('')
+        : '')+
+      (f.mix ? '<div style="font-size:0.62rem;color:var(--fg3);margin-top:10px">'+f.mix+
+        ' opción(es) de esta familia cambian según el caso: esas hay que leerlas.</div>' : '');
+    return;
+  }
+
+  // UNA A UNA: el enunciado con su respuesta correcta, para leer seguido
+  if (!_VER || _VER.tipo !== 'una') {
+    var pool = (typeof ALL !== 'undefined' ? ALL : []).filter(function(q){
+      return q.a && q.a.some(function(a){ return a.ok && a.t; });
+    }).sort(function(a,b){ return (b.f||0)*(b.p||1) - (a.f||0)*(a.p||1); });
+    _VER = { tipo:'una', pool: pool, i: 0 };
+  }
+  var q = _VER.pool[_VER.i];
+  if (!q) { _VER = null; return verVerdades('fam'); }
+  c.innerHTML = tabs +
+    '<div style="font-size:0.62rem;color:var(--fg3);text-align:center;margin-bottom:10px">'+
+      (_VER.i+1)+' de '+_VER.pool.length+' · ordenadas por lo que valen en el examen</div>'+
+    '<div style="font-size:0.82rem;font-weight:700;color:var(--fg);line-height:1.35;margin-bottom:4px">'+
+      esc(q.bg)+'</div>'+
+    '<div style="font-size:0.72rem;color:var(--fg3);margin-bottom:12px">'+esc(_sinPista(q.es||''))+'</div>'+
+    q.a.filter(function(a){ return a.ok; }).map(function(a){
+      return '<div style="background:var(--bg2);border-left:3px solid #22c55e;border-radius:6px;'+
+        'padding:8px 10px;margin-bottom:6px">'+
+        '<div style="font-size:0.72rem;color:var(--fg);line-height:1.4">'+esc(a.t||'(imagen)')+'</div>'+
+        (a.es ? '<div style="font-size:0.68rem;color:var(--acc);line-height:1.4">'+esc(a.es)+'</div>' : '')+
+        '</div>';
+    }).join('')+
+    '<div style="display:flex;gap:8px;margin-top:12px">'+
+      '<button class="rbtn" style="flex:1" onclick="pasarVerdad(-1)">Anterior</button>'+
+      '<button class="rbtn p" style="flex:1" onclick="pasarVerdad(1)">Siguiente</button>'+
+    '</div>';
+}
+window.verVerdades = verVerdades;
+
+function pasarVerdad(d) {
+  if (!_VER) return;
+  _VER.i = Math.max(0, Math.min(_VER.pool.length - 1, _VER.i + d));
+  verVerdades('una');
+}
+window.pasarVerdad = pasarVerdad;
+
+// ══════════════════════════════════════════════════════════════════
 // ¿CUÁNTAS HAY QUE MARCAR? · el reflejo de las multirrespuesta
 // ══════════════════════════════════════════════════════════════════
 // Marcar una casilla de menos da CERO puntos, igual que fallarlas todas.
@@ -1244,9 +1707,7 @@ function mostrarCif() {
     '<div style="text-align:center;padding:24px 8px">'+
       '<div style="font-size:0.68rem;color:var(--fg3);margin-bottom:14px">'+esc(e.t)+
         ' &nbsp;·&nbsp; '+(_CIF.i+1)+' de '+_CIF.cola.length+'</div>'+
-      (e.img ? '<img src="'+e.img+'" alt="Señal de la pregunta" loading="lazy" '+
-        'style="max-width:170px;width:60%;border-radius:8px;background:#fff;'+
-        'margin-bottom:14px" onerror="this.style.display=\'none\'">' : '')+
+      (e.img ? imgTag(e.img, 'max-width:170px;width:60%;border-radius:8px;background:#fff;margin-bottom:14px', 'Señal de la pregunta') : '')+
       '<div style="font-size:1.15rem;font-weight:800;color:var(--fg);line-height:1.35;'+
         'margin-bottom:22px">'+esc(e.q)+'</div>'+
       '<button class="rbtn p" style="width:100%;max-width:320px" onclick="revelarCif()">Ver respuesta</button>'+
@@ -1263,9 +1724,7 @@ function revelarCif() {
   var col = ms <= CIF_MS ? '#22c55e' : '#eab308';
   document.getElementById('cif-body').innerHTML =
     '<div style="text-align:center;padding:20px 8px">'+
-      (e.img ? '<img src="'+e.img+'" alt="Señal de la pregunta" loading="lazy" '+
-        'style="max-width:120px;width:45%;border-radius:8px;background:#fff;'+
-        'margin-bottom:10px" onerror="this.style.display=\'none\'">' : '')+
+      (e.img ? imgTag(e.img, 'max-width:120px;width:45%;border-radius:8px;background:#fff;margin-bottom:10px', 'Señal de la pregunta') : '')+
       '<div style="font-size:1.05rem;font-weight:800;color:var(--acc);margin-bottom:6px;'+
         'line-height:1.35">'+esc(e.r)+'</div>'+
       '<div style="font-size:0.72rem;color:'+col+';font-weight:700;margin-bottom:14px">'+
@@ -1661,8 +2120,11 @@ function confA() {
     ex.className='exp-box show'+(isOK?'':' err');
     var _cuerpo = '<div class="exp-h '+(isOK?'ok':'err')+'">'+(isOK?'✅ Correcto':'❌ Incorrecto')+'</div>'+
       _avisoConf +
-      '<div class="exp-b">'+(q.explain||(isOK?'Bien hecho!':'Repasa esta pregunta.'))+'</div>'+
-      (q.explain?'<button class="btn-speak-es" onclick="speakES(\''+esc(q.explain||'')+'\')">🔊 Escuchar</button>':'');
+      (esVerificada(q)
+        ? '<div class="exp-b">'+(q.explain||(isOK?'Bien hecho!':'Repasa esta pregunta.'))+'</div>'
+        : _avisoSinRevisar())+
+      (esVerificada(q) && q.explain
+        ? '<button class="btn-speak-es" onclick="speakES(\''+esc(q.explain||'')+'\')">🔊 Escuchar</button>' : '');
     // PAUSA DE RECUPERACION: 3s para que intentes explicartelo tu antes de leerlo.
     // Recordar por que se falla consolida mucho mas que leer la respuesta.
     // Se salta en examenes y con el modo velocidad; se desactiva en Ajustes.
@@ -1808,7 +2270,7 @@ function endS() {
           '<div style="font-size:0.72rem;font-weight:600;color:'+(log.ok?'var(--green)':'var(--red)')+'">'+
           (log.ok?'✅':'❌')+' '+(idx+1)+'. '+(q.es||q.bg||'').substring(0,60)+'</div>'+
           (log.ok?'':'<div style="font-size:0.68rem;color:var(--fg3);margin-top:3px">✓ '+correctA+'</div>')+
-          (q.explain&&!log.ok?'<div style="font-size:0.68rem;color:var(--acc2);margin-top:3px">'+q.explain.substring(0,120)+'</div>':'')+
+          (q.explain&&!log.ok&&esVerificada(q)?'<div style="font-size:0.68rem;color:var(--acc2);margin-top:3px">'+q.explain.substring(0,120)+'</div>':'')+
           '</div>';
       });
       html+='</div>';
@@ -1932,7 +2394,7 @@ function openReview(){
       var lbl=isCorr&&isSel?'✅':isCorr&&!isSel?'⚠️ (correcta)':'❌ (error)';
       html += '<div class="rev-a '+cls+'">'+lbl+' '+'ABCD'[ai]+'. '+esc(a.t||'')+(a.es?'<br><small>'+esc(a.es)+'</small>':'')+'</div>';
     });
-    if (entry.q.explain) html += '<div class="rev-exp">'+esc(entry.q.explain)+
+    if (entry.q.explain && esVerificada(entry.q)) html += '<div class="rev-exp">'+esc(entry.q.explain)+
       '<button class="btn-speak-es" onclick="TTS.speakES(\''+esc(entry.q.explain||'')+'\')">🔊</button></div>';
     // Preg lenta: sugerir práctica
     if (t>40 && entry.q.fase<=2) {
@@ -2685,45 +3147,180 @@ function checkAndScheduleNotif() {
 }
 
 // ── PRE-CACHEAR IMÁGENES OFFLINE ──────────────────────────────────
-function preCacheImages() {
-  var btn = document.getElementById('cache-btn');
-  if (btn) { btn.textContent='⏳ Cacheando...'; btn.disabled=true; }
-
-  // Top 100 preguntas más frecuentes con imagen
-  var toCache = ALL
-    .filter(function(q){ return q.i && BRAIN.getFreq(q.id)>=5; })
-    .sort(function(a,b){ return BRAIN.getFreq(b.id)-BRAIN.getFreq(a.id); })
-    .slice(0,100);
-
-  var urls = [];
-  toCache.forEach(function(q){
-    urls.push('https://avtoizpit.com/api/pictures/'+q.i+'.png?quality=2');
-    (q.a||[]).forEach(function(a){ if(a.i) urls.push('https://avtoizpit.com/api/pictures/'+a.i+'.png?quality=2'); });
+function _urlsImagenes() {
+  var urls = {}, banco = (typeof ALL !== 'undefined' ? ALL : [])
+    .concat(typeof VIDS !== 'undefined' ? VIDS : []);
+  banco.forEach(function(q){
+    if (q.i) urls[typeof q.i === 'string' && q.i.indexOf('http') === 0
+      ? q.i : 'https://avtoizpit.com/api/pictures/' + q.i + '.png?quality=2'] = 1;
+    (q.a || []).forEach(function(a){
+      if (a.i) urls[typeof a.i === 'string' && a.i.indexOf('http') === 0
+        ? a.i : 'https://avtoizpit.com/api/pictures/' + a.i + '.png?quality=2'] = 1;
+    });
   });
+  return Object.keys(urls);
+}
 
-  // Videos top 15
-  [48,46,50,49,45,53,47,52,51,61,58,59,10,16,55].forEach(function(v){
-    urls.push('https://avtoizpit.com/api/videos/video'+v+'.mp4');
-  });
+// Los fotogramas de vídeo son del propio sitio, así que no pasan por el
+// mensaje al service worker: se piden con un fetch normal y es el propio
+// worker, en su rama de estáticos, quien los guarda en cache-first.
+function _cacheFotogramas(cb) {
+  var ids = (typeof VIDS !== 'undefined' ? VIDS : []).map(function(q){ return q.id; });
+  var hechos = 0;
+  if (!ids.length) return cb(0);
+  Promise.allSettled(ids.map(function(id){
+    return fetch('vidjpg/' + id + '.jpg').then(function(r){ if (r && r.ok) hechos++; });
+  })).then(function(){ cb(hechos); });
+}
 
+function _pedirCache(urls, btn, etiqueta, cb) {
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     var ch = new MessageChannel();
-    ch.port1.onmessage = function(e) {
-      if (btn) { btn.textContent='✅ '+e.data.cached+' archivos en cache'; btn.disabled=false; }
-      toast('Cache offline listo: '+e.data.cached+' archivos');
-    };
+    ch.port1.onmessage = function(e){ cb(e.data && e.data.cached || 0); };
     navigator.serviceWorker.controller.postMessage({type:'CACHE_IMAGES', urls:urls}, [ch.port2]);
   } else {
-    // Fallback: fetch directo
-    var cached=0;
-    Promise.allSettled(urls.slice(0,50).map(function(u){ return fetch(u); })).then(function(results){
-      cached = results.filter(function(r){return r.status==='fulfilled';}).length;
-      if (btn) { btn.textContent='✅ '+cached+' archivos'; btn.disabled=false; }
-      toast('Cache: '+cached+' archivos');
-    });
+    // sin service worker aún: se piden a mano, que también las guarda
+    var n = 0;
+    Promise.allSettled(urls.map(function(u){
+      return fetch(u).then(function(r){ if (r && r.ok) n++; });
+    })).then(function(){ cb(n); });
   }
 }
+
+// TODAS las imágenes del banco, no solo las cien más frecuentes. Sin esto
+// el offline se queda a medias: en cuanto sale una escena que no cacheaste,
+// te quedas sin dibujo justo en las preguntas que más valen.
+function preCacheImages() {
+  var btn = document.getElementById('cache-btn');
+  var info = document.getElementById('cache-info');
+  var urls = _urlsImagenes();
+  if (btn) { btn.textContent = '⏳ Descargando ' + urls.length + ' imágenes...'; btn.disabled = true; }
+  _pedirCache(urls, btn, 'imágenes', function(n){
+    _cacheFotogramas(function(f){
+      if (btn) { btn.textContent = '✅ ' + n + ' imágenes guardadas'; btn.disabled = false; }
+      if (info) info.textContent = n + ' de ' + urls.length + ' imágenes y ' + f +
+        ' de ' + (typeof VIDS !== 'undefined' ? VIDS.length : 0) +
+        ' fotogramas guardados en el navegador. Ya funcionan sin conexión.';
+      toast('Offline listo: ' + (n + f) + ' archivos');
+    });
+  });
+}
 window.preCacheImages = preCacheImages;
+
+// Los 56 clips son cientos de megas: van en un botón aparte para que sea
+// una decisión, no una sorpresa en mitad de la tarifa de datos.
+function preCacheVideos() {
+  var btn = document.getElementById('cache-vid-btn');
+  var info = document.getElementById('cache-info');
+  var urls = (typeof VIDS !== 'undefined' ? VIDS : []).map(function(q){
+    return 'https://avtoizpit.com/api/videos/video' + (q.v || q.rta_v) + '.mp4';
+  });
+  if (!urls.length) { toast('No hay vídeos que guardar'); return; }
+  if (btn) { btn.textContent = '⏳ Descargando ' + urls.length + ' vídeos...'; btn.disabled = true; }
+  _pedirCache(urls, btn, 'vídeos', function(n){
+    if (btn) { btn.textContent = '✅ ' + n + ' vídeos guardados'; btn.disabled = false; }
+    if (info) info.textContent = n + ' de ' + urls.length + ' vídeos guardados. Ocupan bastante: si necesitas espacio, se borran desde el navegador.';
+    toast('Vídeos offline: ' + n);
+  });
+}
+window.preCacheVideos = preCacheVideos;
+
+// ── IMPORTAR LA CARPETA DEL TELÉFONO ──────────────────────────────
+// La app NO puede leer /storage/... por su cuenta: desde https el
+// navegador lo prohíbe. Pero sí puede recibir la carpeta si tú se la
+// entregas con el selector de archivos, y eso solo hay que hacerlo una
+// vez. Lo que llega se guarda en la misma caché donde el service worker
+// busca las imágenes, con la URL remota como clave. A partir de ahí la
+// app pide la imagen a internet, no la encuentra si no hay cobertura, y
+// el worker la saca de ahí. Cero descargas: son los archivos que ya
+// tienes en el teléfono.
+var _cacheEstatica = null;
+
+// ¿el nombre corresponde a un fotograma de vídeo? (12056.jpg)
+function _esFotograma(nombre) {
+  var m = /^(\d+)\.jpe?g$/i.exec(nombre);
+  if (!m) return false;
+  var id = parseInt(m[1], 10);
+  return (typeof VIDS !== 'undefined' ? VIDS : []).some(function(q){ return q.id === id; });
+}
+
+// La caché de estáticos lleva el id de build en el nombre, así que se
+// busca por prefijo en vez de inventárselo.
+function _abrirCacheEstatica() {
+  return caches.keys().then(function(ks){
+    var k = ks.filter(function(x){ return x.indexOf('avtoizpit-static-') === 0; })[0];
+    return k ? caches.open(k) : null;
+  }).catch(function(){ return null; });
+}
+
+function _mapaLocal() {
+  var mapa = {};
+  var banco = (typeof ALL !== 'undefined' ? ALL : [])
+    .concat(typeof VIDS !== 'undefined' ? VIDS : []);
+  banco.forEach(function(q){
+    function reg(v){
+      if (!v) return;
+      if (typeof v === 'string' && v.indexOf('http') === 0) mapa[v.split('/').pop()] = v;
+      else mapa[v + '.png'] = 'https://avtoizpit.com/api/pictures/' + v + '.png?quality=2';
+    }
+    reg(q.i);
+    (q.a || []).forEach(function(a){ reg(a.i); });
+    var v = q.v || q.rta_v;
+    if (v) mapa['av_' + v + '.mp4'] = 'https://avtoizpit.com/api/videos/video' + v + '.mp4';
+  });
+  return mapa;
+}
+
+function abrirImportador() {
+  var inp = document.getElementById('imp-dir');
+  if (!inp) { toast('No encuentro el selector'); return; }
+  inp.value = '';
+  inp.click();
+}
+window.abrirImportador = abrirImportador;
+
+function importarCarpeta(inp) {
+  var info = document.getElementById('cache-info');
+  var files = Array.prototype.slice.call(inp.files || []);
+  if (!files.length) { toast('No seleccionaste nada'); return; }
+  var mapa = _mapaLocal(), tipos = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', mp4:'video/mp4' };
+  var guardados = 0, sinSitio = 0, fallos = 0, i = 0;
+  if (info) info.textContent = 'Importando ' + files.length + ' archivos...';
+
+  Promise.all([caches.open('avtoizpit-img'), _abrirCacheEstatica()]).then(function(cs){
+    var cache = cs[0];
+    _cacheEstatica = cs[1];
+    function siguiente() {
+      if (i >= files.length) {
+        if (info) info.textContent = guardados + ' archivos guardados para usar sin conexión' +
+          (sinSitio ? ' · ' + sinSitio + ' no corresponden a ninguna pregunta' : '') +
+          (fallos ? ' · ' + fallos + ' no cupieron (memoria del navegador)' : '');
+        toast('Importados ' + guardados + ' archivos');
+        return;
+      }
+      var f = files[i++];
+      var url = mapa[f.name];
+      // Los fotogramas de vídeo son del propio sitio, no de un servidor
+      // ajeno: se guardan bajo su ruta vidjpg/, en la caché de estáticos.
+      var destino = cache;
+      if (!url && _esFotograma(f.name)) {
+        url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'vidjpg/' + f.name;
+        destino = _cacheEstatica || cache;
+      }
+      if (!url) { sinSitio++; return siguiente(); }
+      var ext = (f.name.split('.').pop() || '').toLowerCase();
+      destino.put(url, new Response(f, { headers: { 'Content-Type': tipos[ext] || 'application/octet-stream' } }))
+        .then(function(){ guardados++; })
+        .catch(function(){ fallos++; })
+        .then(function(){
+          if (i % 25 === 0 && info) info.textContent = 'Importando... ' + i + ' de ' + files.length;
+          siguiente();
+        });
+    }
+    siguiente();
+  }).catch(function(){ toast('El navegador no dejó abrir la caché'); });
+}
+window.importarCarpeta = importarCarpeta;
 
 // ═══════════════════════════════════════════════════════════════════
 // TTS ENGINE — Motor bilingüe BG+ES

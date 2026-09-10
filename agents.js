@@ -35,6 +35,59 @@ var AGENTS = (function() {
   };
 
   // ─── AGENTE 1: Coach Máxima Puntuación ───────────────────────────
+  // ── AFIRMACIONES ESTABLES DEL BANCO ───────────────────────────────
+  // Una misma frase aparece como opción en varias preguntas distintas.
+  // En 258 de ellas el veredicto NO cambia nunca: o es siempre correcta
+  // o es siempre falsa, da igual en qué pregunta salga. Esas 258 frases
+  // tocan 361 preguntas y 726 puntos del banco. Aprendida la frase, está
+  // resuelta allá donde aparezca, y eso convierte la unidad de estudio
+  // en la AFIRMACIÓN y no la pregunta.
+  // Se excluyen a propósito las que nombran un coche por su color: esas
+  // dependen de la escena y cambian de veredicto según el dibujo (por
+  // ejemplo «ceder al coche rojo», 7 veces correcta y 10 falsa).
+  var _AFIRM = null;
+  var _AF_ESCENA = /(червен|син|жълт|зелен)(ия|ата|ото|и)?\s+(автомобил|мотоциклет|камион|трамвай)/i;
+
+  function _afNorm(t) {
+    return String(t || '').toLowerCase()
+      .replace(/[«»„”:.,;!?()]/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  // Clave estable derivada del texto: no del orden ni del id de la
+  // pregunta, para que el historial de repasos sobreviva a que el banco
+  // cambie de orden o mejoren las traducciones.
+  function _afHash(t) {
+    var h = 5381;
+    for (var i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+
+  function afirmaciones(all) {
+    if (_AFIRM) return _AFIRM;
+    var mapa = {};
+    (all || []).forEach(function(q){
+      (q.a || []).forEach(function(a){
+        if (!a.t) return;
+        var k = _afNorm(a.t);
+        if (k.split(' ').length < 4) return;
+        if (_AF_ESCENA.test(k)) return;
+        var m = mapa[k] || (mapa[k] = { bg:a.t, es:a.es || '', ok:0, ko:0, ids:[] });
+        if (!m.es && a.es) m.es = a.es;
+        if (a.ok) m.ok++; else m.ko++;
+        if (m.ids.indexOf(q.id) < 0) m.ids.push(q.id);
+      });
+    });
+    _AFIRM = Object.keys(mapa)
+      .filter(function(k){ var m = mapa[k];
+        return (m.ok + m.ko) >= 2 && (m.ok === 0 || m.ko === 0); })
+      .map(function(k){ var m = mapa[k];
+        return { k:'af:' + _afHash(k), bg:m.bg, es:m.es,
+                 v: m.ko === 0, n: m.ok + m.ko, ids: m.ids };
+      })
+      .sort(function(a,b){ return b.n - a.n; });
+    return _AFIRM;
+  }
+
   // ── EL PASO DE AHORA ──────────────────────────────────────────────
   // El plan del día es una SECUENCIA, no un menú. Esta función devuelve
   // el único bloque que toca ahora: el primero sin hacer que cabe en el
@@ -936,7 +989,7 @@ var AGENTS = (function() {
     var totalVids=typeof VIDS!=='undefined'?VIDS.length:56;
     insights.push({c:vidsDone>=15?'g':vidsDone>=8?'w':'b',
       t:'F2 Videos: '+vidsDone+'/'+totalVids+' dominados',
-      b:'Siempre exactamente 2 en el examen, 3pts cada uno. Dominarlos = 6pts seguros + 2min ahorrados.'
+      b:'Exactamente 2 en cada uno de los 200 exámenes medidos, sin una excepción. No siempre valen 3 puntos: la media real es 5,1 puntos por examen. Son 57 preguntas en total y el clip 30 lleva dos (12008 y 12050), así que se estudian juntas.'
     });
 
     // F3: 3pt
@@ -999,7 +1052,7 @@ var AGENTS = (function() {
   }
 
   return {
-    planDia, pasoActual, buildPrueba, leyDeHoy, proyeccion, etapaA, clavesLex: _clavesLex,
+    planDia, pasoActual, afirmaciones, buildPrueba, leyDeHoy, proyeccion, etapaA, clavesLex: _clavesLex,
     getFamilias, familiasDebiles, familiaPorId, fraseFamilia,
     runCoach, getSRSQueue, buildFase1,
     buildRealExam, buildAdaptive, buildUltimaHora,
