@@ -17,16 +17,13 @@ var FRM_LOC  = 'file:///storage/emulated/0/Download/avtoizpit_offline/vidjpg/';
 // forma de cadena, para los módulos que pintan HTML de una vez.
 function imgTag(id, estilo, alt) {
   if (!id) return '';
-  var local, online;
-  if (typeof id === 'string' && id.indexOf('http') === 0) {
-    local  = IMG_LOC + id.split('/').pop();
-    online = id;
-  } else {
-    local  = IMG_LOC + id + '.png';
-    online = IMG + id + '.png?quality=2';
-  }
+  var nombre = _nombreImg(id), propia = 'img/' + nombre, local = IMG_LOC + nombre;
+  var online = (typeof id === 'string' && id.indexOf('http') === 0)
+    ? id : IMG + id + '.png?quality=2';
   return '<img src="'+online+'" alt="'+(alt||'')+'" loading="lazy" style="'+(estilo||'')+'" '+
-    'onerror="if(this.src!==\''+local+'\'){this.src=\''+local+'\';}else{this.style.display=\'none\';}">';
+    'onerror="if(this.src===\''+online+'\'){this.src=\''+propia+'\';}'+
+    'else if(this.src.indexOf(\''+propia+'\')>=0){this.src=\''+local+'\';}'+
+    'else{this.style.display=\'none\';}">';
 }
 
 // Tres sitios donde puede estar el fotograma, en este orden:
@@ -50,27 +47,34 @@ function frameTag(id, estilo) {
 // 1. URL completa (rta.government.bg o http): extrae filename para local, usa URL como fallback online
 // 2. ID numérico (respuestas MREST): local img/{ID}.png, fallback avtoizpit API
 // 3. null/undefined: oculta el elemento
+// Nombre de archivo que le corresponde a una imagen, venga de donde
+// venga. Es la pieza que permite tener tres copias de lo mismo.
+function _nombreImg(id) {
+  if (typeof id === 'string' && id.indexOf('http') === 0)
+    return id.split('/').pop().split('?')[0];
+  return id + '.png';
+}
+
 function loadImg(el, id) {
   if (!id) { el.style.display='none'; return; }
-  var localSrc, onlineSrc;
+  var nombre = _nombreImg(id);
+  var propia = 'img/' + nombre;          // copia en el propio repositorio
+  var localSrc = IMG_LOC + nombre;
+  var onlineSrc = (typeof id === 'string' && id.startsWith('http'))
+    ? id : IMG + id + '.png?quality=2';
 
-  if (typeof id === 'string' && id.startsWith('http')) {
-    var filename = id.split('/').pop();
-    localSrc  = IMG_LOC + filename;
-    onlineSrc = id;
-  } else {
-    localSrc  = IMG_LOC + id + '.png';
-    onlineSrc = IMG + id + '.png?quality=2';
-  }
-
-  // ONLINE PRIMERO. La app se sirve desde https, y desde ahí el navegador
-  // BLOQUEA cualquier file://: intentarlo antes solo gastaba un error por
-  // imagen. El offline de verdad lo da el service worker, que guarda cada
-  // imagen la primera vez que se ve. La ruta local queda de reserva por si
-  // algún día se abre una copia local de index.html.
+  // EL SERVIDOR ORIGINAL PRIMERO, y no por capricho: el service worker
+  // guarda cada imagen la primera vez que se ve, así que cuando no hay
+  // cobertura esa misma petición se resuelve desde la copia del teléfono
+  // sin salir a la red. Pedir antes una carpeta img/ que hoy no existe
+  // solo gastaría un error por imagen en cada pantalla.
+  // Si algún día subes la carpeta al repositorio, entra sola como
+  // segunda opción, sin tocar una línea.
   el.src = onlineSrc;
   el.onerror = function() {
     if (this.src === onlineSrc) {
+      this.src = propia;
+    } else if (this.src.indexOf(propia) >= 0) {
       this.src = localSrc;
     } else {
       // Online también falló — mostrar placeholder visible en vez de ocultar
@@ -84,7 +88,11 @@ function loadImg(el, id) {
 
 // loadVid: q.v es siempre un número (48 → av_48.mp4 local)
 // Fallback: avtoizpit → rta.government.bg
-function loadVid(el, vidId, rtaUrl) {
+// qId es opcional: si se pasa y el vídeo no se puede reproducir por lo
+// que sea, se cambia por el FOTOGRAMA de ese clip. Perder el vídeo no
+// puede significar perder la pregunta: con el instante que decide la
+// escena, la pregunta se sigue pudiendo contestar.
+function loadVid(el, vidId, rtaUrl, qId) {
   if (!vidId && !rtaUrl) { el.style.display='none'; return; }
   var localSrc  = VID_LOC + vidId + '.mp4';
   var onlineSrc = VID + vidId + '.mp4';
@@ -98,8 +106,28 @@ function loadVid(el, vidId, rtaUrl) {
       this.src = localSrc;
     } else {
       this.style.display = 'none';
+      if (qId) _ponerFotograma(el, qId);
     }
   };
+}
+
+function _ponerFotograma(el, qId) {
+  if (!el || !el.parentNode || el.parentNode.querySelector('.frm-sust')) return;
+  var img = document.createElement('img');
+  img.className = 'frm-sust';
+  img.alt = 'Instante que define la situación';
+  img.style.cssText = 'width:100%;border-radius:10px;margin-bottom:8px';
+  var web = 'vidjpg/' + qId + '.jpg', loc = FRM_LOC + qId + '.jpg';
+  img.src = web;
+  img.onerror = function(){
+    if (this.src.indexOf(web) >= 0) { this.src = loc; }
+    else { this.style.display = 'none'; }
+  };
+  el.parentNode.insertBefore(img, el);
+  var nota = document.createElement('div');
+  nota.style.cssText = 'font-size:0.62rem;color:var(--fg3);margin-bottom:8px;line-height:1.4';
+  nota.textContent = 'El vídeo no está disponible ahora. Este es el instante que decide la escena: con él la pregunta se responde igual.';
+  el.parentNode.insertBefore(nota, el);
 }
 var SC  = ['#f97316','#3b82f6','#22c55e','#eab308','#a855f7','#ec4899','#06b6d4','#84cc16'];
 var APP_PW = localStorage.getItem('app_pw') || 'guido2024';
@@ -900,7 +928,7 @@ function renderQ() {
     vid.style.cssText='width:100%;border-radius:8px;max-height:220px;background:#000';
     var vidId = q.v||q.rta_v;
     if (vidId) {
-      loadVid(vid, vidId, q.rta_url); // local → avtoizpit → rta
+      loadVid(vid, vidId, q.rta_url, q.id); // avtoizpit → rta → teléfono → fotograma
     } else {
       vid.src=q.rta_url;
       vid.onerror=function(){this.style.display='none';};
@@ -1036,7 +1064,12 @@ function mostrarLex() {
   // La gramática solo se pregunta de búlgaro a español: producir «да» o
   // «се» a partir de su glosa no enseña nada, esas palabras se reconocen
   // dentro de la frase, no se recitan.
-  _LEX.dir = (e.gram) ? 'bg2es' : ((_LEX.i % 3 === 2) ? 'es2bg' : 'bg2es');
+  // SIEMPRE BÚLGARO → ESPAÑOL. El examen no te pide escribir búlgaro, te
+  // pide LEER búlgaro a una palabra por segundo. Preguntar «cómo se dice
+  // PERMITIDO» entrena a producir, que es otra habilidad, más lenta de
+  // adquirir y que el día del examen no se usa. Lo único que cuenta es
+  // ver разрешено y que te salte el significado sin traducir.
+  _LEX.dir = 'bg2es';
   var pregunta = _LEX.dir === 'bg2es' ? e.bg : e.es;
   var etiqueta = _LEX.dir === 'bg2es' ? 'Qué significa' : 'Cómo se dice en búlgaro';
   _LEX.t0 = Date.now();
@@ -3283,6 +3316,10 @@ function importarCarpeta(inp) {
   var info = document.getElementById('cache-info');
   var files = Array.prototype.slice.call(inp.files || []);
   if (!files.length) { toast('No seleccionaste nada'); return; }
+  // Pedir almacenamiento PERSISTENTE: sin esto el navegador puede borrar
+  // lo importado cuando le falte espacio, y entonces el offline se
+  // evapora justo el día que no hay cobertura.
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   var mapa = _mapaLocal(), tipos = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', mp4:'video/mp4' };
   var guardados = 0, sinSitio = 0, fallos = 0, i = 0;
   if (info) info.textContent = 'Importando ' + files.length + ' archivos...';
@@ -3321,6 +3358,115 @@ function importarCarpeta(inp) {
   }).catch(function(){ toast('El navegador no dejó abrir la caché'); });
 }
 window.importarCarpeta = importarCarpeta;
+
+// ── DIAGNÓSTICO DE OFFLINE ────────────────────────────────────────
+// Antes de decidir nada conviene saber qué permite ESTE teléfono, no lo
+// que yo suponga. Esto lo pregunta al navegador y lo enseña tal cual:
+//   · si existe la API que permitiría leer una carpeta directamente;
+//   · si el almacenamiento es persistente (si no, se puede borrar solo);
+//   · cuánto hay guardado y cuánto queda;
+//   · cuántos archivos hay realmente en la caché de imágenes y vídeos.
+function diagnosticoOffline() {
+  var cont = document.getElementById('diag-offline');
+  if (!cont) return;
+  cont.innerHTML = 'Consultando al navegador...';
+  var lineas = [];
+
+  lineas.push((typeof window.showDirectoryPicker === 'function'
+    ? '✅ Lectura directa de carpetas: DISPONIBLE'
+    : '❌ Lectura directa de carpetas: no disponible en este navegador') +
+    ' — es la única forma de que la app abra la carpeta del teléfono cada vez, sin copiar nada.');
+
+  var tareas = [];
+
+  tareas.push(
+    (navigator.storage && navigator.storage.persisted
+      ? navigator.storage.persisted() : Promise.resolve(null)
+    ).then(function(p){
+      lineas.push(p === null ? '· Persistencia: el navegador no informa'
+        : (p ? '✅ Almacenamiento persistente: SÍ (no se borra solo)'
+             : '⚠️ Almacenamiento persistente: NO. El sistema puede borrar lo guardado si le falta espacio; pulsa Importar para volver a pedirlo.'));
+    }).catch(function(){}));
+
+  tareas.push(
+    (navigator.storage && navigator.storage.estimate
+      ? navigator.storage.estimate() : Promise.resolve(null)
+    ).then(function(e){
+      if (!e) return;
+      var mb = function(n){ return Math.round((n||0)/1048576) + ' MB'; };
+      lineas.push('· Guardado: ' + mb(e.usage) + ' de ' + mb(e.quota) + ' disponibles');
+    }).catch(function(){}));
+
+  tareas.push(caches.open('avtoizpit-img').then(function(c){
+    return c.keys().then(function(ks){
+      var img = ks.filter(function(r){ return /\.(png|jpe?g)/i.test(r.url); }).length;
+      var vid = ks.filter(function(r){ return /\.mp4/i.test(r.url); }).length;
+      lineas.push('· En la caché: ' + img + ' imágenes y ' + vid + ' vídeos');
+    });
+  }).catch(function(){ lineas.push('· No pude leer la caché de imágenes'); }));
+
+  Promise.all(tareas).then(function(){
+    cont.innerHTML = lineas.map(function(l){
+      return '<div style="margin-bottom:6px;line-height:1.45">' + esc(l) + '</div>';
+    }).join('');
+  });
+}
+window.diagnosticoOffline = diagnosticoOffline;
+
+// ── COPIA DE SEGURIDAD DEL PROGRESO ───────────────────────────────
+// Todo lo que llevas estudiado vive en el almacenamiento del navegador,
+// y ese almacenamiento va atado a la DIRECCIÓN desde la que abres la
+// app. Cambiar de dirección —de github.io a una copia local, o a otro
+// móvil— significa empezar de cero, y borrar los datos de Chrome también.
+// Con esto el progreso deja de estar atrapado: sale a un fichero y entra
+// donde haga falta.
+function exportarProgreso() {
+  try {
+    var datos = {
+      app: 'avtoizpit-pro',
+      fecha: new Date().toISOString(),
+      claves: {}
+    };
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      datos.claves[k] = localStorage.getItem(k);
+    }
+    var blob = new Blob([JSON.stringify(datos)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'progreso-avtoizpit-' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+    toast('Progreso exportado a Descargas');
+  } catch (e) { toast('No se pudo exportar: ' + e.message); }
+}
+window.exportarProgreso = exportarProgreso;
+
+function abrirImportProgreso() {
+  var inp = document.getElementById('imp-prog');
+  if (inp) { inp.value = ''; inp.click(); }
+}
+window.abrirImportProgreso = abrirImportProgreso;
+
+function importarProgreso(inp) {
+  var f = (inp.files || [])[0];
+  if (!f) return;
+  var lector = new FileReader();
+  lector.onload = function(){
+    var datos;
+    try { datos = JSON.parse(lector.result); } catch (e) { toast('El fichero no es válido'); return; }
+    if (!datos || datos.app !== 'avtoizpit-pro' || !datos.claves) { toast('Ese fichero no es un progreso de esta app'); return; }
+    if (!confirm('Esto reemplaza el progreso actual de este dispositivo por el del fichero (' +
+        (datos.fecha || '').slice(0,10) + '). ¿Seguir?')) return;
+    try {
+      Object.keys(datos.claves).forEach(function(k){ localStorage.setItem(k, datos.claves[k]); });
+      toast('Progreso restaurado. Recargando...');
+      setTimeout(function(){ location.reload(); }, 900);
+    } catch (e) { toast('No se pudo restaurar: ' + e.message); }
+  };
+  lector.readAsText(f);
+}
+window.importarProgreso = importarProgreso;
 
 // ═══════════════════════════════════════════════════════════════════
 // TTS ENGINE — Motor bilingüe BG+ES

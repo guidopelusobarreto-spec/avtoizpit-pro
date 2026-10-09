@@ -667,6 +667,16 @@ window.onerror = function(msg, src, line, col, err) {
    <button class="sett-btn" style="margin-top:8px" onclick="abrirImportador()">&#128241; Importar la carpeta del tel&eacute;fono (sin descargar nada)</button>
    <input id="imp-dir" type="file" webkitdirectory directory multiple accept="image/*,video/mp4" style="display:none" onchange="importarCarpeta(this)">
    <div id="cache-info" class="sett-sub" style="margin-top:6px"></div>
+   <button class="sett-btn" style="margin-top:8px" onclick="diagnosticoOffline()">&#129514; &iquest;Qu&eacute; permite este tel&eacute;fono?</button>
+   <div id="diag-offline" class="sett-sub" style="margin-top:6px"></div>
+  </div>
+  <!-- Copia de seguridad del progreso -->
+  <div class="sett-row">
+   <div class="sett-lbl">&#128190; Copia de mi progreso</div>
+   <div class="sett-sub">Lo que llevas estudiado vive en este navegador y en esta direcci&oacute;n. Gu&aacute;rdalo en un fichero y podr&aacute;s recuperarlo si borras datos o si abres la app desde otro sitio.</div>
+   <button class="sett-btn" style="margin-top:8px" onclick="exportarProgreso()">&#11015;&#65039; Guardar mi progreso en un fichero</button>
+   <button class="sett-btn" style="margin-top:8px" onclick="abrirImportProgreso()">&#11014;&#65039; Restaurar desde un fichero</button>
+   <input id="imp-prog" type="file" accept="application/json,.json" style="display:none" onchange="importarProgreso(this)">
   </div>
   <!-- Contraseña -->
   <div class="sett-row">
